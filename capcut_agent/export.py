@@ -10,9 +10,10 @@ FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 
 
 def _run(cmd):
-    r = subprocess.run(cmd, capture_output=True, text=True)
+    # 출력은 바이트로 받아 직접 해석한다 (한국어 Windows에서 글자 해석 오류 방지)
+    r = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     if r.returncode != 0:
-        raise RuntimeError(r.stderr[-800:])
+        raise RuntimeError(r.stderr.decode("utf-8", errors="replace")[-800:])
 
 
 def _vf(mode):
