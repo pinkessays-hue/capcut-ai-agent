@@ -31,7 +31,9 @@ def save_thumbnails(video, scenes, outdir):
         cap.set(cv2.CAP_PROP_POS_MSEC, (s["start"] + s["duration"] / 2) * 1000)
         ok, f = cap.read()
         if ok:
-            cv2.imwrite(str(d / f"scene_{s['id']:02d}.jpg"), f)
+            good, buf = cv2.imencode(".jpg", f)
+            if good:
+                (d / f"scene_{s['id']:02d}.jpg").write_bytes(buf.tobytes())
     cap.release()
 
 
@@ -47,9 +49,9 @@ def export_clips(video, plan, outdir, cfg):
               "-c:v", "libx264", "-preset", "fast", "-crf", "20",
               "-pix_fmt", "yuv420p", "-r", "30", str(f)])
         files.append(f)
-    listing = out / "_concat.txt"
-    listing.write_text("".join(f"file '{p.resolve().as_posix()}'\n" for p in files),
-                       encoding="utf-8")
+    # 목록 파일에는 파일명만 적는다 (한글 경로 문제 방지)
+    listing = clips / "_concat.txt"
+    listing.write_text("".join(f"file '{p.name}'\n" for p in files), encoding="utf-8")
     final = out / "reels_draft.mp4"
     _run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
           "-c", "copy", str(final)])
