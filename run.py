@@ -48,7 +48,7 @@ def main():
     cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
     args = [a for a in sys.argv[1:]]
     videos = [Path(a) for a in args] or sorted(
-        p for p in (ROOT / "input").iterdir() if p.suffix.lower() in EXT)
+        p for p in (ROOT / "input").rglob("*") if p.is_file() and p.suffix.lower() in EXT)
     if not videos:
         print("input 폴더에 영상 파일을 넣어 주세요.")
         return
