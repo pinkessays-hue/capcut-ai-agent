@@ -49,6 +49,10 @@ def main():
     args = [a for a in sys.argv[1:]]
     videos = [Path(a) for a in args] or sorted(
         p for p in (ROOT / "input").rglob("*") if p.is_file() and p.suffix.lower() in EXT)
+    keyword = cfg.get("처리할_파일_이름_포함_글자", "")
+    if keyword and not args:
+        videos = [v for v in videos if keyword in v.name or keyword in v.parent.name]
+        print(f"이름에 '{keyword}'가 들어간 영상만 처리합니다: {len(videos)}개")
     if not videos:
         print("input 폴더에 영상 파일을 넣어 주세요.")
         return
