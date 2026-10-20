@@ -53,7 +53,7 @@ export default function Navbar({ viewMode, onSwitchView, isLanding }: Props) {
         padding: '0 16px',
       }}>
         <Link to="/" style={{ textDecoration: 'none', color: 'inherit', fontWeight: 700, fontSize: 15 }}>
-          홈앤힐 파트너스
+          홈앤힐 · 쉬어
         </Link>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -30,7 +30,7 @@ export default function LoginPage() {
       <div className="card" style={{ width: '100%', maxWidth: 400, padding: 32 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4, textAlign: 'center' }}>로그인</h1>
         <p style={{ fontSize: 13, color: 'var(--steel)', textAlign: 'center', marginBottom: 24 }}>
-          홈앤힐 크리에이터 파트너스
+          홈앤힐 · 쉬어 크리에이터 파트너스
         </p>
 
         {error && (

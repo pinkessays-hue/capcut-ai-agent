@@ -34,7 +34,7 @@ export default function LandingPage({ onApply }: Props) {
         textAlign: 'center',
       }}>
         <h1 style={{ fontSize: 32, fontWeight: 700, lineHeight: 1.3, marginBottom: 16 }}>
-          홈앤힐 크리에이터<br />파트너스
+          홈앤힐 · 쉬어<br />크리에이터 파트너스
         </h1>
         <p style={{ fontSize: 16, color: 'var(--charcoal)', maxWidth: 480, margin: '0 auto 32px', lineHeight: 1.6 }}>
           프리미엄 가구를 소개하고 수수료를 받으세요.<br />
