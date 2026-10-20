@@ -1,47 +1,43 @@
-import { useState } from 'react';
-import { getOrders, getProducts, getCreators, getLinks, updateOrderStatus, createTestOrder, formatKRW, formatDate } from '../store/data';
-import { CHANNEL_LABELS, ORDER_STATUS_LABELS } from '../types';
-import type { OrderStatus } from '../types';
+import { useState, useEffect } from 'react';
+import { getAllOrders, updateOrderStatus, createTestOrder } from '../api/orders';
+import { getAllLinks } from '../api/links';
+import { getProducts } from '../api/products';
+import { getAllCreators } from '../api/creators';
+import { formatKRW, formatDate, CHANNEL_LABELS, ORDER_STATUS_LABELS } from '../types';
+import type { Order, OrderStatus, AffiliateLink, Product, Creator } from '../types';
 
-interface Props {
-  onRefresh: () => void;
-}
-
-export default function AdminOrders({ onRefresh }: Props) {
-  const [orders, setOrders] = useState(getOrders());
+export default function AdminOrders() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [links, setLinks] = useState<AffiliateLink[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [creators, setCreators] = useState<Creator[]>([]);
   const [createLinkId, setCreateLinkId] = useState('');
-  const products = getProducts();
-  const creators = getCreators();
-  const links = getLinks();
 
-  const refreshData = () => {
-    setOrders(getOrders());
-    onRefresh();
+  const loadData = () => {
+    getAllOrders().then(res => { if (res.data) setOrders(res.data); }).catch(() => {});
+    getAllLinks().then(res => { if (res.data) setLinks(res.data); }).catch(() => {});
+    getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
+    getAllCreators().then(res => { if (res.data) setCreators(res.data); }).catch(() => {});
   };
 
-  const handleStatusChange = (orderId: string, status: OrderStatus) => {
-    updateOrderStatus(orderId, status);
-    refreshData();
+  useEffect(() => { loadData(); }, []);
+
+  const handleStatusChange = async (orderId: string, status: OrderStatus) => {
+    await updateOrderStatus(orderId, status).catch(() => {});
+    loadData();
   };
 
-  const handleCreateOrder = () => {
-    if (!createLinkId) {
-      alert('링크를 선택해주세요.');
-      return;
-    }
-    createTestOrder(createLinkId);
+  const handleCreateOrder = async () => {
+    if (!createLinkId) { alert('링크를 선택해주세요.'); return; }
+    await createTestOrder(createLinkId).catch(() => {});
     setCreateLinkId('');
-    refreshData();
+    loadData();
   };
 
   return (
     <div className="container" style={{ padding: '32px 16px 64px' }}>
-      <h1 className="section-title" style={{ marginBottom: 4 }}>주문 관리</h1>
-      <p style={{ fontSize: 14, color: 'var(--steel)', marginBottom: 24 }}>
-        테스트 주문 조회 및 상태 관리 <span className="text-test-data">테스트 데이터</span>
-      </p>
+      <h1 className="section-title" style={{ marginBottom: 24 }}>주문 관리</h1>
 
-      {/* Create test order */}
       <div className="card" style={{ marginBottom: 24, padding: 16 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>테스트 주문 생성</h3>
         <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap' }}>
@@ -50,11 +46,11 @@ export default function AdminOrders({ onRefresh }: Props) {
             <select className="select-field" value={createLinkId} onChange={e => setCreateLinkId(e.target.value)} aria-label="귀속 링크 선택">
               <option value="">선택하세요</option>
               {links.map(l => {
-                const creator = creators.find(c => c.id === l.creatorId);
-                const product = products.find(p => p.id === l.productId);
+                const cr = creators.find(c => c.id === l.creatorId);
+                const pr = products.find(p => p.id === l.productId);
                 return (
                   <option key={l.id} value={l.id}>
-                    {creator?.name} — {product?.name} ({CHANNEL_LABELS[l.channel]}) [{l.linkCode}]
+                    {cr?.name} — {pr?.name} ({CHANNEL_LABELS[l.channel]}) [{l.linkCode}]
                   </option>
                 );
               })}
@@ -76,20 +72,20 @@ export default function AdminOrders({ onRefresh }: Props) {
                 <th>상품</th>
                 <th>채널</th>
                 <th style={{ textAlign: 'right' }}>금액</th>
-                <th>주문 상태</th>
+                <th>상태</th>
                 <th style={{ textAlign: 'right' }}>수수료</th>
                 <th>변경</th>
               </tr>
             </thead>
             <tbody>
               {orders.slice().reverse().map(o => {
-                const creator = creators.find(c => c.id === o.creatorId);
-                const product = products.find(p => p.id === o.productId);
+                const cr = creators.find(c => c.id === o.creatorId);
+                const pr = products.find(p => p.id === o.productId);
                 return (
                   <tr key={o.id}>
                     <td style={{ whiteSpace: 'nowrap' }}>{formatDate(o.orderedAt)}</td>
-                    <td>{creator?.name}</td>
-                    <td>{product?.name}</td>
+                    <td>{cr?.name}</td>
+                    <td>{pr?.name}</td>
                     <td><span className="badge badge-info">{CHANNEL_LABELS[o.channel]}</span></td>
                     <td style={{ textAlign: 'right' }}>{formatKRW(o.amount)}</td>
                     <td>
@@ -97,41 +93,12 @@ export default function AdminOrders({ onRefresh }: Props) {
                         {ORDER_STATUS_LABELS[o.status]}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
-                      {formatKRW(o.commission)}
-                      <div style={{ fontSize: 11, color: 'var(--stone)' }}>
-                        {o.status === 'payment_pending' ? '(예상)' : o.status === 'confirmed' ? '(확정)' : ''}
-                      </div>
-                    </td>
+                    <td style={{ textAlign: 'right' }}>{formatKRW(o.commission)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        {o.status !== 'confirmed' && (
-                          <button
-                            className="btn-ghost btn-small"
-                            style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => handleStatusChange(o.id, 'confirmed')}
-                          >
-                            확정
-                          </button>
-                        )}
-                        {o.status !== 'cancelled' && (
-                          <button
-                            className="btn-ghost btn-small"
-                            style={{ fontSize: 11, padding: '4px 10px', color: 'var(--critical)' }}
-                            onClick={() => handleStatusChange(o.id, 'cancelled')}
-                          >
-                            취소
-                          </button>
-                        )}
-                        {o.status !== 'payment_pending' && (
-                          <button
-                            className="btn-ghost btn-small"
-                            style={{ fontSize: 11, padding: '4px 10px' }}
-                            onClick={() => handleStatusChange(o.id, 'payment_pending')}
-                          >
-                            대기
-                          </button>
-                        )}
+                        {o.status !== 'confirmed' && <button className="btn-ghost btn-small" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => handleStatusChange(o.id, 'confirmed')}>확정</button>}
+                        {o.status !== 'cancelled' && <button className="btn-ghost btn-small" style={{ fontSize: 11, padding: '4px 10px', color: 'var(--critical)' }} onClick={() => handleStatusChange(o.id, 'cancelled')}>취소</button>}
+                        {o.status !== 'payment_pending' && <button className="btn-ghost btn-small" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => handleStatusChange(o.id, 'payment_pending')}>대기</button>}
                       </div>
                     </td>
                   </tr>

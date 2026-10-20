@@ -361,10 +361,32 @@ table tr:last-child td {
   white-space: nowrap;
 }
 
-.pill-tab.active {
+.pill-tab.active,
+.pill-tab.pill-tab-active {
   background: var(--ink-deep);
   color: var(--canvas);
   border-color: var(--ink-deep);
+}
+
+.critical-soft {
+  background: rgba(228, 30, 63, 0.08);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+textarea.input-field {
+  height: auto;
+  padding: 12px;
+}
+
+.btn-buy:disabled,
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .empty-state {
@@ -378,7 +400,15 @@ table tr:last-child td {
   margin-top: 8px;
 }
 
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+
 @media (max-width: 767px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+
+  #nav-hamburger { display: inline-flex !important; }
+  #nav-pills { display: none !important; }
   .stat-card .stat-value {
     font-size: 20px;
   }
@@ -399,5 +429,9 @@ table tr:last-child td {
   table th, table td {
     padding: 8px;
     font-size: 13px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }

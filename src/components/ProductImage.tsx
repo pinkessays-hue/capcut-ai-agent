@@ -1,6 +1,7 @@
+import type { Product } from '../types';
+
 interface ProductImageProps {
-  name: string;
-  infoReady: boolean;
+  product: Product;
   size?: number;
   rounded?: string;
 }
@@ -17,16 +18,17 @@ const ICONS: Record<string, string> = {
   '휴고 플립': '💺',
 };
 
-export default function ProductImage({ name, infoReady, size = 160, rounded = 'var(--rounded-xl)' }: ProductImageProps) {
-  const bg = COLORS[name] || '#e8e8e8';
-  const icon = ICONS[name] || '📦';
+export default function ProductImage({ product, size, rounded = '0' }: ProductImageProps) {
+  const bg = COLORS[product.name] || '#e8e8e8';
+  const icon = ICONS[product.name] || '📦';
+  const s = size || 160;
 
   return (
     <div
       style={{
-        width: size,
-        height: size,
-        minWidth: size,
+        width: '100%',
+        height: s,
+        minHeight: s,
         borderRadius: rounded,
         background: bg,
         display: 'flex',
@@ -34,15 +36,15 @@ export default function ProductImage({ name, infoReady, size = 160, rounded = 'v
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        fontSize: size > 80 ? size * 0.3 : size * 0.4,
+        fontSize: s > 80 ? s * 0.3 : s * 0.4,
         position: 'relative',
         overflow: 'hidden',
       }}
       role="img"
-      aria-label={name}
+      aria-label={product.name}
     >
       <span>{icon}</span>
-      {!infoReady && (
+      {!product.infoReady && (
         <span style={{
           position: 'absolute',
           bottom: 8,
@@ -51,7 +53,7 @@ export default function ProductImage({ name, infoReady, size = 160, rounded = 'v
           color: 'var(--steel)',
           background: 'rgba(255,255,255,0.85)',
           padding: '2px 8px',
-          borderRadius: 'var(--rounded-full)',
+          borderRadius: 20,
         }}>
           준비 중
         </span>

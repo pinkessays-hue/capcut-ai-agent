@@ -1,0 +1,238 @@
+import { Router } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+import { getDb, generateLinkCode } from '../db';
+import { hashPassword, verifyPassword, generateToken, authMiddleware, AuthRequest } from '../auth';
+
+const router = Router();
+
+router.post('/register', (req, res) => {
+  const { email, password, name, phone, category, channels, termsAgreed, privacyAgreed } = req.body;
+
+  if (!email || !password || !name) {
+    res.status(400).json({ error: '이메일, 비밀번호, 이름은 필수입니다.' });
+    return;
+  }
+  if (password.length < 8) {
+    res.status(400).json({ error: '비밀번호는 8자 이상이어야 합니다.' });
+    return;
+  }
+  if (!termsAgreed || !privacyAgreed) {
+    res.status(400).json({ error: '필수 약관에 동의해야 합니다.' });
+    return;
+  }
+
+  const db = getDb();
+
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+  if (existing) {
+    res.status(409).json({ error: '이미 등록된 이메일입니다.' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const userId = uuidv4();
+  const creatorId = uuidv4();
+  const passwordHash = hashPassword(password);
+
+  const insertUser = db.prepare(
+    'INSERT INTO users (id, email, password_hash, name, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  const insertCreator = db.prepare(
+    'INSERT INTO creators (id, user_id, display_name, phone, category, channels, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+
+  const txn = db.transaction(() => {
+    insertUser.run(userId, email, passwordHash, name, 'creator', 'active', now);
+    insertCreator.run(
+      creatorId, userId, name, phone || '', category || '',
+      JSON.stringify(channels || []), 'active', now, now
+    );
+
+    const products = db.prepare("SELECT id FROM products WHERE sale_status = 'active' AND info_ready = 1").all() as { id: string }[];
+    const insertLink = db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
+
+    for (const product of products) {
+      let code = generateLinkCode();
+      while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
+        code = generateLinkCode();
+      }
+      insertLink.run(uuidv4(), code, creatorId, product.id, 'direct', '자동 발급 링크', now);
+    }
+  });
+
+  try {
+    txn();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: '회원가입 처리 중 오류가 발생했습니다.', detail: message });
+    return;
+  }
+
+  const token = generateToken(userId, 'creator');
+  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.status(201).json({
+    ok: true,
+    token,
+    user: { id: userId, email, name, role: 'creator', creatorId },
+  });
+});
+
+router.post('/login', (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    res.status(400).json({ error: '이메일과 비밀번호를 입력하세요.' });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, email, password_hash, name, role, status FROM users WHERE email = ?').get(email) as {
+    id: string; email: string; password_hash: string; name: string; role: string; status: string;
+  } | undefined;
+
+  if (!user || !verifyPassword(password, user.password_hash)) {
+    res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    return;
+  }
+  if (user.status === 'suspended') {
+    res.status(403).json({ error: '정지된 계정입니다. 운영자에게 문의하세요.' });
+    return;
+  }
+
+  let creatorId: string | null = null;
+  if (user.role === 'creator') {
+    const creator = db.prepare('SELECT id, status FROM creators WHERE user_id = ?').get(user.id) as { id: string; status: string } | undefined;
+    if (creator?.status === 'suspended') {
+      res.status(403).json({ error: '정지된 크리에이터 계정입니다. 운영자에게 문의하세요.' });
+      return;
+    }
+    creatorId = creator?.id || null;
+  }
+
+  const token = generateToken(user.id, user.role);
+  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.json({
+    ok: true,
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, creatorId },
+  });
+});
+
+router.post('/logout', (_req, res) => {
+  res.clearCookie('token');
+  res.json({ ok: true });
+});
+
+router.post('/password-reset-request', (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).json({ error: '이메일을 입력하세요.' });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
+
+  // Always return success to prevent email enumeration
+  if (user) {
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(
+      `reset_token:${user.id}`,
+      JSON.stringify({ token: resetToken, expiresAt: expiry })
+    );
+    console.log(`[auth] 비밀번호 재설정 토큰 생성됨 (사용자: ${user.id}). 이메일 발송 서비스가 연결되지 않아 콘솔에 출력합니다: ${resetToken}`);
+  }
+
+  res.json({ message: '등록된 이메일인 경우 재설정 안내가 발송됩니다. (이메일 서비스 미연동 — 서버 로그를 확인하세요)' });
+});
+
+router.post('/password-reset', (req, res) => {
+  const { userId, resetToken, newPassword } = req.body;
+  if (!userId || !resetToken || !newPassword) {
+    res.status(400).json({ error: '필수 정보가 누락되었습니다.' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: '비밀번호는 8자 이상이어야 합니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const stored = db.prepare("SELECT value FROM settings WHERE key = ?").get(`reset_token:${userId}`) as { value: string } | undefined;
+  if (!stored) {
+    res.status(400).json({ error: '유효하지 않은 재설정 요청입니다.' });
+    return;
+  }
+
+  const { token: storedToken, expiresAt } = JSON.parse(stored.value);
+  if (storedToken !== resetToken || new Date(expiresAt) < new Date()) {
+    res.status(400).json({ error: '만료되었거나 유효하지 않은 토큰입니다.' });
+    return;
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), userId);
+  db.prepare("DELETE FROM settings WHERE key = ?").run(`reset_token:${userId}`);
+  res.json({ message: '비밀번호가 변경되었습니다.' });
+});
+
+router.get('/me', authMiddleware, (req: AuthRequest, res) => {
+  const db = getDb();
+  const user = db.prepare('SELECT id, email, name, role, status, created_at FROM users WHERE id = ?').get(req.user!.id) as {
+    id: string; email: string; name: string; role: string; status: string; created_at: string;
+  } | undefined;
+
+  if (!user) {
+    res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    return;
+  }
+
+  let creatorId: string | null = null;
+  let creatorInfo = null;
+  if (user.role === 'creator') {
+    const creator = db.prepare('SELECT * FROM creators WHERE user_id = ?').get(user.id) as Record<string, unknown> | undefined;
+    if (creator) {
+      creatorId = creator.id as string;
+      creatorInfo = {
+        ...creator,
+        channels: JSON.parse(creator.channels as string || '[]'),
+      };
+    }
+  }
+
+  res.json({
+    ok: true,
+    data: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      creatorId,
+    },
+    creator: creatorInfo,
+  });
+});
+
+router.post('/change-password', authMiddleware, (req: AuthRequest, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: '현재 비밀번호와 새 비밀번호를 입력하세요.' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ error: '새 비밀번호는 8자 이상이어야 합니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user!.id) as { password_hash: string } | undefined;
+  if (!user || !verifyPassword(currentPassword, user.password_hash)) {
+    res.status(400).json({ error: '현재 비밀번호가 올바르지 않습니다.' });
+    return;
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), req.user!.id);
+  res.json({ ok: true, message: '비밀번호가 변경되었습니다.' });
+});
+
+export default router;

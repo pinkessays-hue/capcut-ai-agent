@@ -1,173 +1,128 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { getProducts, getLinks, getOrders, createLink, recordClick, formatKRW, formatPercent, formatDate } from '../store/data';
-import { CHANNEL_LABELS } from '../types';
-import type { ChannelType } from '../types';
+import { getProducts } from '../api/products';
+import { getMyLinks, createLink, simulateClick, type CreateLinkPayload } from '../api/links';
+import { formatKRW, formatPercent, formatDate, CHANNEL_LABELS } from '../types';
+import type { Product, AffiliateLink, ChannelType } from '../types';
 
-interface Props {
-  creatorId: string;
-  onRefresh: () => void;
-}
+const CHANNEL_OPTIONS: ChannelType[] = ['youtube', 'instagram', 'tiktok', 'naver_blog', 'ohouse', 'other'];
 
-export default function CreatorLinks({ creatorId, onRefresh }: Props) {
+export default function CreatorLinks() {
   const location = useLocation();
-  const initialProductId = (location.state as any)?.productId || '';
+  const preselectedProduct = (location.state as { productId?: string } | null)?.productId;
 
-  const [links, setLinks] = useState(getLinks().filter(l => l.creatorId === creatorId));
-  const [orders, setOrders] = useState(getOrders().filter(o => o.creatorId === creatorId));
-  const [showForm, setShowForm] = useState(!!initialProductId);
-  const [productId, setProductId] = useState(initialProductId);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [links, setLinks] = useState<AffiliateLink[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [productId, setProductId] = useState(preselectedProduct || '');
   const [channel, setChannel] = useState<ChannelType>('youtube');
+  const [channelOther, setChannelOther] = useState('');
   const [contentTitle, setContentTitle] = useState('');
-  const [copied, setCopied] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
-  const products = getProducts();
-
-  const refreshData = () => {
-    setLinks(getLinks().filter(l => l.creatorId === creatorId));
-    setOrders(getOrders().filter(o => o.creatorId === creatorId));
-    onRefresh();
+  const loadData = () => {
+    getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
+    getMyLinks().then(res => { if (res.data) setLinks(res.data); }).catch(() => {});
   };
 
-  const handleCreate = () => {
-    if (!productId || !contentTitle) {
-      alert('상품과 콘텐츠 제목을 입력해주세요.');
-      return;
-    }
-    createLink(creatorId, productId, channel, contentTitle);
-    setProductId('');
-    setContentTitle('');
-    setShowForm(false);
-    refreshData();
-  };
+  useEffect(() => { loadData(); }, []);
+  useEffect(() => { if (preselectedProduct) { setProductId(preselectedProduct); setShowForm(true); } }, [preselectedProduct]);
 
-  const handleClick = (linkId: string) => {
-    recordClick(linkId);
-    refreshData();
-  };
-
-  const handleCopy = async (linkCode: string) => {
-    const url = `${window.location.origin}/?ref=${linkCode}`;
+  const handleCreate = async () => {
+    if (!productId || !contentTitle.trim()) return;
+    setCreating(true);
     try {
-      await navigator.clipboard.writeText(url);
-      setCopied(linkCode);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      prompt('링크를 복사하세요:', url);
+      const payload: CreateLinkPayload = { productId, channel, contentTitle: contentTitle.trim() };
+      if (channel === 'other') payload.channelOther = channelOther.trim();
+      await createLink(payload);
+      setShowForm(false);
+      setContentTitle('');
+      loadData();
+    } catch { /* silent */ } finally {
+      setCreating(false);
     }
   };
 
-  const getLinkStats = (linkId: string) => {
-    const linkOrders = orders.filter(o => o.linkId === linkId);
-    return {
-      orders: linkOrders.length,
-      sales: linkOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + o.amount, 0),
-      commission: linkOrders.reduce((s, o) => s + o.commission, 0),
-    };
+  const handleTestClick = async (id: string) => {
+    await simulateClick(id).catch(() => {});
+    loadData();
   };
+
+  const baseUrl = window.location.origin;
 
   return (
     <div className="container" style={{ padding: '32px 16px 64px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h1 className="section-title" style={{ marginBottom: 4 }}>내 링크</h1>
-          <p style={{ fontSize: 14, color: 'var(--steel)' }}>
-            상품·채널·콘텐츠별 개인 링크 관리 <span className="text-test-data">테스트 데이터</span>
-          </p>
-        </div>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? '취소' : '+ 새 링크 발급'}
-        </button>
+        <h1 className="section-title" style={{ marginBottom: 0 }}>마케팅 링크</h1>
+        {!showForm && <button className="btn-buy" onClick={() => setShowForm(true)}>+ 새 링크 발급</button>}
       </div>
 
       {showForm && (
-        <div className="card" style={{ marginBottom: 24 }}>
-          <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>링크 발급</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">상품</label>
-              <select className="select-field" value={productId} onChange={e => setProductId(e.target.value)} aria-label="상품 선택">
-                <option value="">선택하세요</option>
-                {products.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} {!p.infoReady ? '(준비 중)' : ''}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">홍보 채널</label>
-              <select className="select-field" value={channel} onChange={e => setChannel(e.target.value as ChannelType)} aria-label="채널 선택">
-                {Object.entries(CHANNEL_LABELS).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">콘텐츠 제목</label>
-              <input
-                className="input-field"
-                placeholder="영상 또는 게시물 제목"
-                value={contentTitle}
-                onChange={e => setContentTitle(e.target.value)}
-              />
-            </div>
+        <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>링크 발급</h3>
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">상품</label>
+            <select className="select-field" value={productId} onChange={e => setProductId(e.target.value)}>
+              <option value="">선택하세요</option>
+              {products.filter(p => p.saleStatus === 'on_sale' && p.infoReady).map(p => (
+                <option key={p.id} value={p.id}>{p.name} — 수수료 {(p.commissionRate * 100).toFixed(0)}%</option>
+              ))}
+            </select>
           </div>
-          <button className="btn-buy" onClick={handleCreate} style={{ marginTop: 8 }}>
-            링크 생성
-          </button>
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">채널</label>
+            <select className="select-field" value={channel} onChange={e => setChannel(e.target.value as ChannelType)}>
+              {CHANNEL_OPTIONS.map(ch => <option key={ch} value={ch}>{CHANNEL_LABELS[ch]}</option>)}
+            </select>
+          </div>
+          {channel === 'other' && (
+            <div style={{ marginBottom: 12 }}>
+              <label className="form-label">채널명</label>
+              <input className="input-field" value={channelOther} onChange={e => setChannelOther(e.target.value)} placeholder="채널명 입력" />
+            </div>
+          )}
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">콘텐츠 제목</label>
+            <input className="input-field" value={contentTitle} onChange={e => setContentTitle(e.target.value)} placeholder="콘텐츠 제목 (예: 포미침대 리뷰)" />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn-buy" onClick={handleCreate} disabled={creating || !productId || !contentTitle.trim()}>
+              {creating ? '생성 중...' : '링크 생성'}
+            </button>
+            <button className="btn-ghost" onClick={() => setShowForm(false)}>취소</button>
+          </div>
         </div>
       )}
 
       {links.length === 0 ? (
-        <div className="empty-state">
-          <p>아직 발급한 링크가 없습니다.</p>
-          <button className="btn-primary" style={{ marginTop: 16 }} onClick={() => setShowForm(true)}>
-            첫 링크 만들기
-          </button>
-        </div>
+        <div className="empty-state"><p>발급한 링크가 없습니다.</p></div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {links.map(link => {
             const product = products.find(p => p.id === link.productId);
-            const stats = getLinkStats(link.id);
+            const linkUrl = `${baseUrl}/r/${link.linkCode}`;
+
             return (
               <div key={link.id} className="card" style={{ padding: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                   <div>
-                    <span style={{ fontWeight: 700, fontSize: 15 }}>{product?.name || link.productId}</span>
+                    <span style={{ fontWeight: 700, fontSize: 15 }}>{product?.name || '상품'}</span>
                     <span className="badge badge-info" style={{ marginLeft: 8 }}>{CHANNEL_LABELS[link.channel]}</span>
+                    {!link.active && <span className="badge badge-critical" style={{ marginLeft: 4 }}>비활성</span>}
                   </div>
                   <span style={{ fontSize: 12, color: 'var(--stone)' }}>{formatDate(link.createdAt)}</span>
                 </div>
-                <p style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 8 }}>
-                  {link.contentTitle}
-                </p>
-                <div style={{
-                  display: 'flex',
-                  gap: 16,
-                  fontSize: 13,
-                  color: 'var(--steel)',
-                  marginBottom: 12,
-                  flexWrap: 'wrap',
-                }}>
+                <p style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 8 }}>{link.contentTitle}</p>
+                <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
+                  링크: <code style={{ background: 'var(--surface-soft)', padding: '2px 6px', borderRadius: 4, fontSize: 11, wordBreak: 'break-all' }}>{linkUrl}</code>
+                  &nbsp;· 수수료율: {formatPercent(link.commissionRateAtCreation)}
+                </div>
+                <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--steel)', marginBottom: 12, flexWrap: 'wrap' }}>
                   <span>클릭 <strong style={{ color: 'var(--ink)' }}>{link.clicks}</strong></span>
-                  <span>주문 <strong style={{ color: 'var(--ink)' }}>{stats.orders}</strong></span>
-                  <span>매출 <strong style={{ color: 'var(--ink)' }}>{formatKRW(stats.sales)}</strong></span>
-                  <span>수수료 <strong style={{ color: 'var(--primary)' }}>{formatKRW(stats.commission)}</strong></span>
-                  <span>수수료율 {formatPercent(link.commissionRateAtCreation)}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    className="btn-ghost btn-small"
-                    onClick={() => handleCopy(link.linkCode)}
-                  >
-                    {copied === link.linkCode ? '✓ 복사됨' : '링크 복사'}
-                  </button>
-                  <button
-                    className="btn-ghost btn-small"
-                    onClick={() => handleClick(link.id)}
-                  >
-                    테스트 방문 (+1 클릭)
-                  </button>
+                  <button className="btn-ghost btn-small" onClick={() => navigator.clipboard.writeText(linkUrl)}>링크 복사</button>
+                  <button className="btn-ghost btn-small" onClick={() => handleTestClick(link.id)}>테스트 방문 (+1 클릭)</button>
                 </div>
               </div>
             );

@@ -1,187 +1,144 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import type { ViewMode } from '../App';
-import { getCreators } from '../store/data';
 
-interface NavbarProps {
+interface Props {
   viewMode: ViewMode;
   onSwitchView: (mode: ViewMode) => void;
-  selectedCreatorId: string;
-  onSelectCreator: (id: string) => void;
   isLanding: boolean;
 }
 
-export default function Navbar({ viewMode, onSwitchView, selectedCreatorId, onSelectCreator, isLanding }: NavbarProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+const CREATOR_NAV = [
+  { label: '대시보드', path: '/creator' },
+  { label: '상품', path: '/creator/products' },
+  { label: '링크', path: '/creator/links' },
+  { label: '주문', path: '/creator/orders' },
+  { label: '포인트', path: '/creator/wallet' },
+  { label: '정산', path: '/creator/settlement' },
+  { label: '계좌', path: '/creator/bank-account' },
+  { label: '프로필', path: '/creator/profile' },
+];
+
+const ADMIN_NAV = [
+  { label: '대시보드', path: '/admin' },
+  { label: '크리에이터', path: '/admin/creators' },
+  { label: '상품', path: '/admin/products' },
+  { label: '링크', path: '/admin/links' },
+  { label: '주문', path: '/admin/orders' },
+  { label: '정산', path: '/admin/settlement' },
+  { label: '연동', path: '/admin/integrations' },
+];
+
+export default function Navbar({ viewMode, onSwitchView, isLanding }: Props) {
+  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const creators = getCreators().filter(c => c.status === 'approved');
-  const selectedCreator = creators.find(c => c.id === selectedCreatorId);
+  const { user, logout } = useAuth();
 
-  const creatorLinks = [
-    { path: '/creator', label: '대시보드' },
-    { path: '/creator/products', label: '상품' },
-    { path: '/creator/links', label: '링크' },
-    { path: '/creator/orders', label: '실적' },
-    { path: '/creator/settlement', label: '정산' },
-    { path: '/creator/profile', label: '프로필' },
-  ];
-
-  const adminLinks = [
-    { path: '/admin', label: '현황' },
-    { path: '/admin/creators', label: '크리에이터' },
-    { path: '/admin/products', label: '상품' },
-    { path: '/admin/links', label: '링크' },
-    { path: '/admin/orders', label: '주문' },
-    { path: '/admin/settlement', label: '정산' },
-  ];
-
-  const navLinks = viewMode === 'creator' ? creatorLinks : viewMode === 'admin' ? adminLinks : [];
+  const navItems = viewMode === 'creator' ? CREATOR_NAV : viewMode === 'admin' ? ADMIN_NAV : [];
 
   return (
     <nav style={{
       position: 'sticky',
       top: 0,
       zIndex: 100,
-      background: 'var(--canvas)',
+      background: '#fff',
       borderBottom: '1px solid var(--hairline-soft)',
     }}>
       <div className="container" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        height: 64,
-        gap: 16,
+        height: 56,
+        padding: '0 16px',
       }}>
-        <Link to="/" onClick={() => onSwitchView('public')} style={{
-          fontWeight: 700,
-          fontSize: 16,
-          color: 'var(--ink-deep)',
-          textDecoration: 'none',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-        }}>
-          홈앤힐 · 쉬어
+        <Link to="/" style={{ textDecoration: 'none', color: 'inherit', fontWeight: 700, fontSize: 15 }}>
+          홈앤힐 파트너스
         </Link>
 
-        {!isLanding && (
-          <div className="nav-pills-desktop" style={{
-            display: 'flex',
-            gap: 6,
-            overflow: 'auto',
-            flexShrink: 1,
-          }}>
-            {navLinks.map(link => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`pill-tab ${location.pathname === link.path ? 'active' : ''}`}
-                style={{ textDecoration: 'none', fontSize: 13 }}
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {!isLanding && (
-            <div style={{ display: 'flex', gap: 4 }}>
-              <button
-                className={`pill-tab ${viewMode === 'creator' ? 'active' : ''}`}
-                onClick={() => onSwitchView('creator')}
-                style={{ fontSize: 12, padding: '6px 12px' }}
-              >
-                크리에이터
-              </button>
-              <button
-                className={`pill-tab ${viewMode === 'admin' ? 'active' : ''}`}
-                onClick={() => onSwitchView('admin')}
-                style={{ fontSize: 12, padding: '6px 12px' }}
-              >
-                운영자
-              </button>
-            </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {user ? (
+            <>
+              {user.role === 'admin' && viewMode !== 'admin' && (
+                <button className="btn-ghost btn-small" onClick={() => onSwitchView('admin')}>운영자</button>
+              )}
+              {user.role === 'admin' && viewMode === 'admin' && (
+                <button className="btn-ghost btn-small" onClick={() => onSwitchView('creator')}>크리에이터</button>
+              )}
+              <span style={{ fontSize: 13, color: 'var(--steel)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user.name}
+              </span>
+              <button className="btn-ghost btn-small" onClick={logout}>로그아웃</button>
+            </>
+          ) : (
+            !isLanding && (
+              <>
+                <Link to="/login" className="btn-ghost btn-small" style={{ textDecoration: 'none' }}>로그인</Link>
+                <Link to="/register" className="btn-buy btn-small" style={{ textDecoration: 'none' }}>가입</Link>
+              </>
+            )
           )}
-
-          {!isLanding && viewMode === 'creator' && (
-            <select
-              value={selectedCreatorId}
-              onChange={e => onSelectCreator(e.target.value)}
-              style={{
-                fontSize: 12,
-                padding: '6px 8px',
-                border: '1px solid var(--hairline)',
-                borderRadius: 'var(--rounded-lg)',
-                background: 'var(--canvas)',
-                color: 'var(--ink)',
-                maxWidth: 120,
-              }}
-              aria-label="데모 크리에이터 선택"
-            >
-              {creators.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-
-          {!isLanding && (
+          {navItems.length > 0 && (
             <button
-              className="nav-hamburger"
-              onClick={() => setMenuOpen(!menuOpen)}
-              aria-label="메뉴 열기"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                display: 'none',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 20,
-                border: '1px solid var(--hairline)',
-              }}
+              className="btn-ghost btn-small"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              style={{ display: 'none', padding: '6px 10px' }}
+              aria-label="메뉴"
+              id="nav-hamburger"
             >
-              {menuOpen ? '✕' : '☰'}
+              ☰
             </button>
           )}
         </div>
       </div>
 
-      {menuOpen && !isLanding && (
-        <div className="nav-mobile-menu" style={{
-          background: 'var(--canvas)',
-          borderBottom: '1px solid var(--hairline-soft)',
-          padding: '8px 16px 16px',
-        }}>
-          {navLinks.map(link => (
+      {navItems.length > 0 && (
+        <div
+          className="container nav-pills-scroll"
+          id="nav-pills"
+          style={{
+            display: 'flex',
+            gap: 4,
+            padding: '0 12px 10px',
+            overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          {navItems.map(item => (
             <Link
-              key={link.path}
-              to={link.path}
-              onClick={() => setMenuOpen(false)}
-              style={{
-                display: 'block',
-                padding: '10px 0',
-                fontSize: 15,
-                fontWeight: location.pathname === link.path ? 700 : 400,
-                color: location.pathname === link.path ? 'var(--primary)' : 'var(--ink)',
-                textDecoration: 'none',
-                borderBottom: '1px solid var(--hairline-soft)',
-              }}
+              key={item.path}
+              to={item.path}
+              onClick={() => setMobileOpen(false)}
+              className={`pill-tab ${location.pathname === item.path ? 'pill-tab-active' : ''}`}
+              style={{ textDecoration: 'none', whiteSpace: 'nowrap' }}
             >
-              {link.label}
+              {item.label}
             </Link>
           ))}
         </div>
       )}
 
-      <style>{`
-        @media (max-width: 767px) {
-          .nav-pills-desktop { display: none !important; }
-          .nav-hamburger { display: flex !important; }
-        }
-        @media (min-width: 768px) {
-          .nav-mobile-menu { display: none !important; }
-        }
-      `}</style>
+      {mobileOpen && navItems.length > 0 && (
+        <div id="mobile-nav" style={{
+          padding: '8px 16px 16px',
+          borderTop: '1px solid var(--hairline-soft)',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+        }}>
+          {navItems.map(item => (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => setMobileOpen(false)}
+              className={`pill-tab ${location.pathname === item.path ? 'pill-tab-active' : ''}`}
+              style={{ textDecoration: 'none' }}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
     </nav>
   );
 }
