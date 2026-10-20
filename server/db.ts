@@ -256,13 +256,14 @@ function migrateSchema(d: Database.Database): void {
           channels TEXT DEFAULT '[]',
           selected_products TEXT DEFAULT '[]',
           rejection_reason TEXT,
+          name_en TEXT DEFAULT '',
           status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','active','suspended','rejected')),
           created_at TEXT NOT NULL,
           approved_at TEXT
         );
-        INSERT INTO creators_new (id, user_id, display_name, phone, category, channels, selected_products, rejection_reason, status, created_at, approved_at)
+        INSERT INTO creators_new (id, user_id, display_name, phone, category, channels, selected_products, rejection_reason, name_en, status, created_at, approved_at)
           SELECT id, user_id, display_name, phone, category, channels,
-            COALESCE(selected_products, '[]'), rejection_reason, status, created_at, approved_at
+            COALESCE(selected_products, '[]'), rejection_reason, COALESCE(name_en, ''), status, created_at, approved_at
           FROM creators;
         DROP TABLE creators;
         ALTER TABLE creators_new RENAME TO creators;
