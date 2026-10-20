@@ -81,8 +81,8 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
   const id = uuidv4();
   const now = new Date().toISOString();
 
-  db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-    id, code, creatorId, productId, channel, contentTitle || '', now
+  db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, issued_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, code, creatorId, productId, channel, contentTitle || '', req.user!.id, now
   );
 
   const link = db.prepare(`

@@ -1,13 +1,30 @@
 import { useState, useEffect } from 'react';
 import { getProducts } from '../api/products';
-import { getMyLinks } from '../api/links';
+import { getMyLinks, createLink } from '../api/links';
 import { formatPercent, formatDate, CHANNEL_LABELS } from '../types';
-import type { Product, AffiliateLink } from '../types';
+import type { Product, AffiliateLink, ChannelType } from '../types';
+
+const CHANNEL_OPTIONS: { value: ChannelType; label: string }[] = [
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'naver_blog', label: '네이버 블로그' },
+  { value: 'ohouse', label: '오늘의집' },
+  { value: 'other', label: '기타' },
+];
 
 export default function CreatorLinks() {
   const [products, setProducts] = useState<Product[]>([]);
   const [links, setLinks] = useState<AffiliateLink[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const [showForm, setShowForm] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState<ChannelType | ''>('');
+  const [contentTitle, setContentTitle] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const loadData = () => {
     getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
@@ -24,14 +41,123 @@ export default function CreatorLinks() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  const activeProducts = products.filter(p => p.saleStatus === 'active' && p.infoReady);
+
+  const resetForm = () => {
+    setSelectedProductId('');
+    setSelectedChannel('');
+    setContentTitle('');
+    setFormError(null);
+  };
+
+  const handleCreate = async () => {
+    if (!selectedProductId || !selectedChannel) {
+      setFormError('상품과 채널을 선택해주세요.');
+      return;
+    }
+    setCreating(true);
+    setFormError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await createLink({
+        productId: selectedProductId,
+        channel: selectedChannel as ChannelType,
+        contentTitle: contentTitle.trim(),
+      });
+      if (res.ok && res.data) {
+        setSuccessMsg('링크가 생성되었습니다!');
+        resetForm();
+        setShowForm(false);
+        loadData();
+      } else {
+        setFormError(res.error || '링크 생성에 실패했습니다.');
+      }
+    } catch (err: unknown) {
+      setFormError(err instanceof Error ? err.message : '링크 생성에 실패했습니다.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   return (
     <div className="container" style={{ padding: '32px 16px 64px' }}>
-      <h1 className="section-title" style={{ marginBottom: 24 }}>마케팅 링크</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
+        <h1 className="section-title" style={{ marginBottom: 0 }}>마케팅 링크</h1>
+        {!showForm && (
+          <button className="btn-buy" onClick={() => { setShowForm(true); setSuccessMsg(null); }}>+ 링크 생성</button>
+        )}
+      </div>
 
-      {links.length === 0 ? (
+      {successMsg && (
+        <div style={{ background: 'var(--primary-soft)', color: 'var(--primary)', padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 16 }}>
+          {successMsg}
+        </div>
+      )}
+
+      {showForm && (
+        <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>링크 생성</h3>
+
+          {formError && (
+            <div style={{ background: '#fff0f0', color: 'var(--critical)', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12 }}>
+              {formError}
+            </div>
+          )}
+
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">상품 선택</label>
+            <select className="select-field" value={selectedProductId} onChange={e => setSelectedProductId(e.target.value)}>
+              <option value="">상품을 선택하세요</option>
+              {activeProducts.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name}{p.price > 0 ? ` (${p.price.toLocaleString('ko-KR')}원 · ${(p.commissionRate * 100).toFixed(0)}%)` : ''}
+                </option>
+              ))}
+            </select>
+            {activeProducts.length === 0 && (
+              <p style={{ fontSize: 12, color: 'var(--stone)', marginTop: 4 }}>현재 링크를 생성할 수 있는 상품이 없습니다.</p>
+            )}
+          </div>
+
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">채널</label>
+            <select className="select-field" value={selectedChannel} onChange={e => setSelectedChannel(e.target.value as ChannelType)}>
+              <option value="">채널을 선택하세요</option>
+              {CHANNEL_OPTIONS.map(ch => (
+                <option key={ch.value} value={ch.value}>{ch.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">콘텐츠 제목 <span style={{ fontSize: 11, color: 'var(--stone)', fontWeight: 400 }}>(선택)</span></label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="예: 여름 인테리어 추천 영상"
+              value={contentTitle}
+              onChange={e => setContentTitle(e.target.value)}
+              maxLength={100}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-buy"
+              onClick={handleCreate}
+              disabled={creating || !selectedProductId || !selectedChannel}
+            >
+              {creating ? '생성 중...' : '링크 생성'}
+            </button>
+            <button className="btn-ghost" onClick={() => { setShowForm(false); resetForm(); }}>취소</button>
+          </div>
+        </div>
+      )}
+
+      {links.length === 0 && !showForm ? (
         <div className="empty-state">
-          <p>아직 발급된 링크가 없습니다.</p>
-          <p style={{ fontSize: 13, color: 'var(--stone)', marginTop: 8 }}>운영자가 승인 후 링크를 발급해드립니다.</p>
+          <p>아직 생성된 링크가 없습니다.</p>
+          <p style={{ fontSize: 13, color: 'var(--stone)', marginTop: 8 }}>위의 "링크 생성" 버튼을 눌러 마케팅 링크를 만들어보세요.</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -168,7 +168,12 @@ export default function AdminLinks() {
                     {!link.active && <span className="badge badge-critical" style={{ marginLeft: 4 }}>비활성</span>}
                   </div>
                   <span style={{ fontSize: 12, color: 'var(--stone)' }}>
-                    {creator?.name} · {formatDate(link.createdAt)}
+                    {creator?.name}
+                    {link.issuedBy && link.issuedBy !== creator?.userId
+                      ? <span className="badge" style={{ marginLeft: 6, fontSize: 10, background: 'var(--primary-soft)', color: 'var(--primary)' }}>운영자 발급</span>
+                      : <span className="badge" style={{ marginLeft: 6, fontSize: 10, background: '#e8f5e9', color: '#2e7d32' }}>직접 생성</span>
+                    }
+                    {' · '}{formatDate(link.createdAt)}
                   </span>
                 </div>
                 {link.contentTitle && <p style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 8 }}>{link.contentTitle}</p>}
