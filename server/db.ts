@@ -155,6 +155,15 @@ function initSchema(): void {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS cafe24_order_events (
+      id TEXT PRIMARY KEY,
+      cafe24_order_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      raw_data TEXT NOT NULL,
+      processed INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_links_code ON links(code);
     CREATE INDEX IF NOT EXISTS idx_links_creator ON links(creator_id);
     CREATE INDEX IF NOT EXISTS idx_click_logs_link ON click_logs(link_id);
@@ -165,6 +174,8 @@ function initSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_point_ledger_creator ON point_ledger(creator_id);
     CREATE INDEX IF NOT EXISTS idx_settlements_creator ON settlements(creator_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log(target_type, target_id);
+    CREATE INDEX IF NOT EXISTS idx_cafe24_events_order ON cafe24_order_events(cafe24_order_id);
+    CREATE INDEX IF NOT EXISTS idx_cafe24_events_processed ON cafe24_order_events(processed);
   `);
 
   migrateSchema(d);

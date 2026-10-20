@@ -78,3 +78,59 @@ export async function getTestMode(): Promise<ApiResponse<{ testMode: boolean }>>
   const raw = await api.get<{ ok: boolean; data: { testMode: boolean } }>('/admin/test-mode');
   return { ok: true, data: raw.data };
 }
+
+// ── Analytics ──
+
+export interface AnalyticsSummary {
+  totalOrders: number;
+  totalSales: number;
+  confirmedSales: number;
+  cancelledAmount: number;
+  refundedAmount: number;
+  totalCommission: number;
+  attributedOrders: number;
+  unattributedOrders: number;
+}
+
+export interface DailyData {
+  date: string;
+  orders: number;
+  sales: number;
+  cancels: number;
+  cancelAmount: number;
+}
+
+export interface ProductData {
+  productId: string;
+  productName: string;
+  orders: number;
+  sales: number;
+  quantity: number;
+  cancels: number;
+  cancelAmount: number;
+}
+
+export interface CreatorData {
+  creatorId: string;
+  creatorName: string;
+  orders: number;
+  sales: number;
+  commission: number;
+}
+
+export interface AnalyticsData {
+  summary: AnalyticsSummary;
+  daily: DailyData[];
+  byProduct: ProductData[];
+  byCreator: CreatorData[];
+  cafe24Status: {
+    connected: boolean;
+    lastSync: string | null;
+    totalSyncedOrders: number;
+  };
+}
+
+export async function getAnalytics(startDate: string, endDate: string): Promise<ApiResponse<AnalyticsData>> {
+  const raw = await api.get<{ ok: boolean; data: AnalyticsData }>(`/admin/analytics?startDate=${startDate}&endDate=${endDate}`);
+  return { ok: true, data: raw.data };
+}

@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User } from '../types';
 import { setAccessToken, setOnUnauthorized } from '../api/client';
-import { getMe, login as apiLogin, logout as apiLogout, register as apiRegister, type RegisterPayload } from '../api/auth';
+import { getMe, login as apiLogin, loginSimple as apiLoginSimple, logout as apiLogout, register as apiRegister, type RegisterPayload } from '../api/auth';
 
 interface AuthState {
   user: User | null;
@@ -11,6 +11,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
+  loginSimple: (nickname: string, pin: string) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
   logout: () => void;
   clearError: () => void;
@@ -62,6 +63,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginSimple = async (nickname: string, pin: string) => {
+    setState(s => ({ ...s, error: null, loading: true }));
+    try {
+      const res = await apiLoginSimple(nickname, pin);
+      setAccessToken(res.token);
+      sessionStorage.setItem('_t', res.token);
+      setState({ user: res.user, loading: false, error: null });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '로그인에 실패했습니다.';
+      setState(s => ({ ...s, loading: false, error: msg }));
+      throw err;
+    }
+  };
+
   const register = async (payload: RegisterPayload) => {
     setState(s => ({ ...s, error: null, loading: true }));
     try {
@@ -85,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearError = () => setState(s => ({ ...s, error: null }));
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout, clearError }}>
+    <AuthContext.Provider value={{ ...state, login, loginSimple, register, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );

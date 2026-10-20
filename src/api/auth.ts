@@ -15,6 +15,7 @@ export interface RegisterPayload {
   category: string;
   channels: ChannelType[];
   channelOther?: string;
+  nickname?: string;
   selectedProducts: string[];
   termsAgreed: boolean;
   privacyAgreed: boolean;
@@ -38,4 +39,16 @@ export async function logout(): Promise<void> {
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<ApiResponse> {
   return api.post<ApiResponse>('/auth/change-password', { currentPassword, newPassword });
+}
+
+export async function loginSimple(nickname: string, pin: string): Promise<AuthResponse> {
+  return api.post<AuthResponse>('/auth/login/simple', { nickname, pin });
+}
+
+export async function setNickname(nickname: string, pin: string): Promise<ApiResponse> {
+  return api.post<ApiResponse>('/auth/nickname/set', { nickname, pin });
+}
+
+export async function checkNickname(nickname: string): Promise<ApiResponse<{ available: boolean }>> {
+  return api.get<ApiResponse<{ available: boolean }>>(`/auth/nickname/check/${encodeURIComponent(nickname)}`);
 }

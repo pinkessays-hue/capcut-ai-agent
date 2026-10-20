@@ -163,6 +163,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  nickname?: string;
   creatorId?: string;
   creatorStatus?: CreatorStatus;
 }
