@@ -21,6 +21,8 @@ function mapLink(l: Record<string, unknown>): AffiliateLink {
     commissionRateAtCreation: (l.commission_rate ?? l.commissionRateAtCreation ?? 0) as number,
     active: l.active !== false && l.active !== 0,
     issuedBy: (l.issued_by ?? l.issuedBy) as string | undefined,
+    productUrl: (l.product_url ?? l.productUrl) as string | undefined,
+    creatorNameEn: (l.creator_name_en ?? l.creatorNameEn) as string | undefined,
     createdAt: (l.created_at ?? l.createdAt) as string || '',
   };
 }

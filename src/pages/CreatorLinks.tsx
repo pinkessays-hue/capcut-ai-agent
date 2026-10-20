@@ -35,10 +35,18 @@ export default function CreatorLinks() {
 
   const baseUrl = window.location.origin;
 
-  const copyLink = (code: string, id: string) => {
-    navigator.clipboard.writeText(`${baseUrl}/r/${code}`);
+  const copyLink = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const buildUtmUrl = (link: AffiliateLink) => {
+    if (!link.productUrl) return null;
+    const sep = link.productUrl.includes('?') ? '&' : '?';
+    const src = encodeURIComponent(link.creatorNameEn || link.linkCode);
+    const med = encodeURIComponent(link.channel || 'direct');
+    return `${link.productUrl}${sep}cafe_mkt=${link.linkCode}&utm_source=${src}&utm_medium=${med}&utm_campaign=${link.linkCode}`;
   };
 
   const activeProducts = products.filter(p => p.saleStatus === 'active' && p.infoReady);
@@ -163,7 +171,8 @@ export default function CreatorLinks() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {links.map(link => {
             const product = products.find(p => p.id === link.productId);
-            const linkUrl = `${baseUrl}/r/${link.linkCode}`;
+            const shortUrl = `${baseUrl}/r/${link.linkCode}`;
+            const utmUrl = buildUtmUrl(link);
 
             return (
               <div key={link.id} className="card" style={{ padding: 16, opacity: link.active ? 1 : 0.6 }}>
@@ -177,17 +186,27 @@ export default function CreatorLinks() {
                 </div>
                 {link.contentTitle && <p style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 8 }}>{link.contentTitle}</p>}
                 <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
-                  링크: <code style={{ background: 'var(--surface-soft)', padding: '2px 6px', borderRadius: 4, fontSize: 11, wordBreak: 'break-all' }}>{linkUrl}</code>
+                  단축 링크: <code style={{ background: 'var(--surface-soft)', padding: '2px 6px', borderRadius: 4, fontSize: 11, wordBreak: 'break-all' }}>{shortUrl}</code>
                   &nbsp;· 수수료율: {formatPercent(link.commissionRateAtCreation)}
                 </div>
+                {utmUrl && (
+                  <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
+                    UTM 링크: <code style={{ background: '#eff6ff', padding: '2px 6px', borderRadius: 4, fontSize: 10, wordBreak: 'break-all', display: 'inline-block', maxWidth: '100%', lineHeight: 1.5 }}>{utmUrl}</code>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--steel)', marginBottom: 8, flexWrap: 'wrap' }}>
                   <span>클릭 <strong style={{ color: 'var(--ink)' }}>{link.clicks}</strong></span>
                   <span style={{ color: 'var(--stone)' }}>주문: 연동 전</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button className="btn-ghost btn-small" onClick={() => copyLink(link.linkCode, link.id)}>
-                    {copiedId === link.id ? '복사됨!' : '링크 복사'}
+                  <button className="btn-ghost btn-small" onClick={() => copyLink(shortUrl, link.id + '-short')}>
+                    {copiedId === link.id + '-short' ? '복사됨!' : '단축 링크 복사'}
                   </button>
+                  {utmUrl && (
+                    <button className="btn-ghost btn-small" style={{ color: 'var(--primary)' }} onClick={() => copyLink(utmUrl, link.id + '-utm')}>
+                      {copiedId === link.id + '-utm' ? '복사됨!' : 'UTM 링크 복사'}
+                    </button>
+                  )}
                 </div>
               </div>
             );

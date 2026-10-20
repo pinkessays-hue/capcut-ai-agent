@@ -15,10 +15,12 @@ router.get('/mine', authMiddleware, (req: AuthRequest, res) => {
   }
 
   const links = db.prepare(`
-    SELECT l.*, p.name as product_name,
+    SELECT l.*, p.name as product_name, p.product_url,
+      c.name_en as creator_name_en,
       (SELECT COUNT(*) FROM click_logs WHERE link_id = l.id) as clicks
     FROM links l
     JOIN products p ON l.product_id = p.id
+    JOIN creators c ON l.creator_id = c.id
     WHERE l.creator_id = ?
     ORDER BY l.created_at DESC
   `).all(creator.id);
@@ -86,9 +88,11 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
   );
 
   const link = db.prepare(`
-    SELECT l.*, p.name as product_name, 0 as clicks
+    SELECT l.*, p.name as product_name, p.product_url,
+      c.name_en as creator_name_en, 0 as clicks
     FROM links l
     JOIN products p ON l.product_id = p.id
+    JOIN creators c ON l.creator_id = c.id
     WHERE l.id = ?
   `).get(id);
 

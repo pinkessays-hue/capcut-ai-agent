@@ -32,11 +32,14 @@ app.use(cookieParser());
 app.get('/r/:code', (req, res) => {
   const db = getDb();
   const link = db.prepare(`
-    SELECT l.id, l.code, l.active, l.product_id, p.cafe24_secret_url, p.product_url
+    SELECT l.id, l.code, l.active, l.product_id, l.channel,
+      p.cafe24_secret_url, p.product_url,
+      c.name_en as creator_name_en
     FROM links l
     JOIN products p ON l.product_id = p.id
+    JOIN creators c ON l.creator_id = c.id
     WHERE l.code = ?
-  `).get(req.params.code) as { id: string; code: string; active: number; product_id: string; cafe24_secret_url: string; product_url: string } | undefined;
+  `).get(req.params.code) as { id: string; code: string; active: number; product_id: string; channel: string; cafe24_secret_url: string; product_url: string; creator_name_en: string } | undefined;
 
   if (!link) {
     res.status(404).send('링크를 찾을 수 없습니다.');
@@ -63,15 +66,17 @@ app.get('/r/:code', (req, res) => {
     new Date().toISOString()
   );
 
-  const appendTracking = (url: string, code: string) => {
+  const appendTracking = (url: string, code: string, nameEn: string, channel: string) => {
     const sep = url.includes('?') ? '&' : '?';
-    return `${url}${sep}cafe_mkt=${code}`;
+    const utmSource = encodeURIComponent(nameEn || code);
+    const utmMedium = encodeURIComponent(channel || 'direct');
+    return `${url}${sep}cafe_mkt=${code}&utm_source=${utmSource}&utm_medium=${utmMedium}&utm_campaign=${code}`;
   };
 
   if (link.cafe24_secret_url) {
-    res.redirect(302, appendTracking(link.cafe24_secret_url, link.code));
+    res.redirect(302, appendTracking(link.cafe24_secret_url, link.code, link.creator_name_en, link.channel));
   } else if (link.product_url) {
-    res.redirect(302, appendTracking(link.product_url, link.code));
+    res.redirect(302, appendTracking(link.product_url, link.code, link.creator_name_en, link.channel));
   } else {
     const siteUrl = process.env.SITE_URL || process.env.BASE_URL || `http://localhost:${PORT}`;
     res.redirect(302, siteUrl);

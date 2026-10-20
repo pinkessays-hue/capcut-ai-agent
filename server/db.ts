@@ -214,6 +214,10 @@ function migrateSchema(d: Database.Database): void {
   }
   try { d.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_nickname ON users(nickname)`); } catch { /* exists */ }
 
+  if (!hasCol('creators', 'name_en')) {
+    d.exec(`ALTER TABLE creators ADD COLUMN name_en TEXT DEFAULT ''`);
+  }
+
   if (!hasCol('orders', 'attribution_type')) {
     d.exec(`ALTER TABLE orders ADD COLUMN attribution_type TEXT DEFAULT 'none'`);
   }
@@ -285,16 +289,16 @@ export function seedDatabase(): void {
     const insertProduct = d.prepare(
       'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    insertProduct.run('prod_1', '포미 리프트업 침대', '포미 2단 리프트업 침대 엠보형 LK', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=303&cate_no=35&display_group=1', '', '', 0.05, 'active', 1, 890000, now, now);
+    insertProduct.run('prod_1', '포미 리프트업 침대', '포미 2단 리프트업 침대 엠보형 LK', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', 'https://homeandheal01.cafe24.com/product/detail.html?product_no=303&cate_no=35&display_group=1', '', '', 0.05, 'active', 1, 890000, now, now);
     insertProduct.run('prod_2', '리클라이너 소파', '', '', 'sofa', '', '', '', 0.04, 'preparing', 0, 0, now, now);
     insertProduct.run('prod_3', '휴고 플립', '', '접이식 디자인으로 좁은 공간에서도 편안한 휴식. 컴팩트하게 접어 보관 가능.', 'chair', '', '', '', 0.06, 'active', 1, 450000, now, now);
     insertProduct.run('prod_4', '네어 리프트업 침대', '쉬어 네오 리프트업 침대 SS/K', '리프트업 수납 침대의 새로운 기준. 심플한 디자인에 넉넉한 수납 공간.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=302&cate_no=54&display_group=1', '', '', 0.05, 'active', 1, 790000, now, now);
   } else {
     const prod1 = d.prepare('SELECT id FROM products WHERE id = ?').get('prod_1');
     if (prod1) {
-      d.prepare("UPDATE products SET original_name = ?, product_url = ? WHERE id = ? AND (original_name = '' OR original_name IS NULL)").run(
+      d.prepare("UPDATE products SET original_name = ?, product_url = ? WHERE id = ?").run(
         '포미 2단 리프트업 침대 엠보형 LK',
-        'https://homeandheal.co.kr/product/detail.html?product_no=303&cate_no=35&display_group=1',
+        'https://homeandheal01.cafe24.com/product/detail.html?product_no=303&cate_no=35&display_group=1',
         'prod_1'
       );
     }
@@ -334,19 +338,21 @@ function seedTestData(d: Database.Database, now: string): void {
     user2Id, 'junseo@example.com', hashSync('test1234', 10), '이준서', 'creator', 'active', '2024-10-01T09:00:00Z'
   );
 
-  d.prepare('INSERT INTO creators (id, user_id, display_name, phone, category, channels, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+  d.prepare('INSERT INTO creators (id, user_id, display_name, phone, category, channels, name_en, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     creator1Id, user1Id, '김하늘', '010-0000-0001', '인테리어 / 홈스타일링',
     JSON.stringify([
       { type: 'youtube', url: 'https://youtube.com/@example_haneul', accountName: '하늘의 인테리어' },
       { type: 'instagram', url: 'https://instagram.com/example_haneul', accountName: '@example_haneul' },
     ]),
+    'haneul',
     'active', '2024-09-15T10:00:00Z', '2024-09-15T10:00:00Z'
   );
-  d.prepare('INSERT INTO creators (id, user_id, display_name, phone, category, channels, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+  d.prepare('INSERT INTO creators (id, user_id, display_name, phone, category, channels, name_en, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
     creator2Id, user2Id, '이준서', '010-0000-0002', '가구 리뷰 / 리빙',
     JSON.stringify([
       { type: 'naver_blog', url: 'https://blog.naver.com/example_junseo', accountName: '준서의 리빙로그' },
     ]),
+    'junseo',
     'active', '2024-10-01T09:00:00Z', '2024-10-01T09:00:00Z'
   );
 

@@ -63,6 +63,8 @@ export interface AffiliateLink {
   commissionRateAtCreation: number;
   active: boolean;
   issuedBy?: string;
+  productUrl?: string;
+  creatorNameEn?: string;
   createdAt: string;
 }
 
