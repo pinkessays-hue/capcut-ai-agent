@@ -26,6 +26,7 @@ const ADMIN_NAV = [
   { label: '상품', path: '/admin/products' },
   { label: '링크', path: '/admin/links' },
   { label: '주문', path: '/admin/orders' },
+  { label: '매출분석', path: '/admin/analytics' },
   { label: '정산', path: '/admin/settlement' },
   { label: '연동', path: '/admin/integrations' },
 ];

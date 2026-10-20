@@ -206,6 +206,33 @@ function migrateSchema(d: Database.Database): void {
     d.exec(`ALTER TABLE links ADD COLUMN issued_by TEXT`);
   }
 
+  if (!hasCol('users', 'nickname')) {
+    d.exec(`ALTER TABLE users ADD COLUMN nickname TEXT`);
+  }
+  if (!hasCol('users', 'pin')) {
+    d.exec(`ALTER TABLE users ADD COLUMN pin TEXT`);
+  }
+  try { d.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_nickname ON users(nickname)`); } catch { /* exists */ }
+
+  if (!hasCol('orders', 'attribution_type')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN attribution_type TEXT DEFAULT 'none'`);
+  }
+  if (!hasCol('orders', 'cafe24_order_status')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN cafe24_order_status TEXT`);
+  }
+  if (!hasCol('orders', 'refund_amount')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN refund_amount INTEGER DEFAULT 0`);
+  }
+  if (!hasCol('orders', 'cafe24_product_no')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN cafe24_product_no TEXT`);
+  }
+  if (!hasCol('orders', 'order_date')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN order_date TEXT`);
+  }
+  if (!hasCol('orders', 'payment_date')) {
+    d.exec(`ALTER TABLE orders ADD COLUMN payment_date TEXT`);
+  }
+
   const creatorInfo = d.prepare(`PRAGMA table_info(creators)`).all() as { name: string; type: string }[];
   const statusCol = creatorInfo.find(c => c.name === 'status');
   if (statusCol) {

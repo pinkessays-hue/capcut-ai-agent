@@ -179,8 +179,8 @@ router.post('/password-reset', (req, res) => {
 
 router.get('/me', authMiddleware, (req: AuthRequest, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, email, name, role, status, created_at FROM users WHERE id = ?').get(req.user!.id) as {
-    id: string; email: string; name: string; role: string; status: string; created_at: string;
+  const user = db.prepare('SELECT id, email, name, role, status, nickname, created_at FROM users WHERE id = ?').get(req.user!.id) as {
+    id: string; email: string; name: string; role: string; status: string; nickname: string | null; created_at: string;
   } | undefined;
 
   if (!user) {
@@ -211,6 +211,7 @@ router.get('/me', authMiddleware, (req: AuthRequest, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      nickname: user.nickname || null,
       creatorId,
       creatorStatus,
     },
@@ -238,6 +239,90 @@ router.post('/change-password', authMiddleware, (req: AuthRequest, res) => {
 
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword), req.user!.id);
   res.json({ ok: true, message: '비밀번호가 변경되었습니다.' });
+});
+
+router.post('/login/simple', (req, res) => {
+  const { nickname, pin } = req.body;
+  if (!nickname || !pin) {
+    res.status(400).json({ error: '닉네임과 PIN을 입력하세요.' });
+    return;
+  }
+  if (!/^\d{6}$/.test(pin)) {
+    res.status(400).json({ error: 'PIN은 숫자 6자리여야 합니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, email, password_hash, name, role, status, nickname, pin FROM users WHERE nickname = ?').get(nickname) as {
+    id: string; email: string; password_hash: string; name: string; role: string; status: string; nickname: string; pin: string;
+  } | undefined;
+
+  if (!user || !user.pin || !verifyPassword(pin, user.pin)) {
+    res.status(401).json({ error: '닉네임 또는 PIN이 올바르지 않습니다.' });
+    return;
+  }
+  if (user.status === 'suspended') {
+    res.status(403).json({ error: '정지된 계정입니다. 운영자에게 문의하세요.' });
+    return;
+  }
+
+  let creatorId: string | null = null;
+  let creatorStatus: string | null = null;
+  if (user.role === 'creator') {
+    const creator = db.prepare('SELECT id, status, rejection_reason FROM creators WHERE user_id = ?').get(user.id) as { id: string; status: string; rejection_reason: string | null } | undefined;
+    if (creator?.status === 'suspended') {
+      res.status(403).json({ error: '정지된 크리에이터 계정입니다.' });
+      return;
+    }
+    if (creator?.status === 'rejected') {
+      res.status(403).json({ error: `신청이 반려되었습니다.${creator.rejection_reason ? ' 사유: ' + creator.rejection_reason : ''}` });
+      return;
+    }
+    creatorId = creator?.id || null;
+    creatorStatus = creator?.status || null;
+  }
+
+  const token = generateToken(user.id, user.role);
+  res.cookie('token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  res.json({
+    ok: true,
+    token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, nickname: user.nickname, creatorId, creatorStatus },
+  });
+});
+
+router.post('/nickname/set', authMiddleware, (req: AuthRequest, res) => {
+  const { nickname, pin } = req.body;
+  if (!nickname || !pin) {
+    res.status(400).json({ error: '닉네임과 PIN을 입력하세요.' });
+    return;
+  }
+  if (nickname.length < 2 || nickname.length > 20) {
+    res.status(400).json({ error: '닉네임은 2~20자여야 합니다.' });
+    return;
+  }
+  if (!/^\d{6}$/.test(pin)) {
+    res.status(400).json({ error: 'PIN은 숫자 6자리여야 합니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM users WHERE nickname = ? AND id != ?').get(nickname, req.user!.id);
+  if (existing) {
+    res.status(409).json({ error: '이미 사용 중인 닉네임입니다.' });
+    return;
+  }
+
+  const pinHash = hashPassword(pin);
+  db.prepare('UPDATE users SET nickname = ?, pin = ? WHERE id = ?').run(nickname, pinHash, req.user!.id);
+  res.json({ ok: true, message: '닉네임과 PIN이 설정되었습니다.' });
+});
+
+router.get('/nickname/check/:nickname', (req, res) => {
+  const { nickname } = req.params;
+  const db = getDb();
+  const existing = db.prepare('SELECT id FROM users WHERE nickname = ?').get(nickname);
+  res.json({ ok: true, data: { available: !existing } });
 });
 
 export default router;

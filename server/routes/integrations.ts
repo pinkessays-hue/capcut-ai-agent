@@ -58,9 +58,40 @@ router.post('/cafe24/webhook', async (req, res) => {
   }
 
   const db = getDb();
+  const now = new Date().toISOString();
 
-  const existingOrder = db.prepare('SELECT id FROM orders WHERE cafe24_order_id = ?').get(order.order_id);
+  db.prepare(
+    'INSERT INTO cafe24_order_events (id, cafe24_order_id, event_type, raw_data, processed, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(uuidv4(), order.order_id, resource, JSON.stringify(req.body), 0, now);
+
+  const existingOrder = db.prepare('SELECT id, order_status FROM orders WHERE cafe24_order_id = ?').get(order.order_id) as { id: string; order_status: string } | undefined;
+
   if (existingOrder) {
+    const cafe24Status = order.order_status || order.status;
+    const refundAmount = parseInt(order.refund_amount || '0');
+    const updates: string[] = [];
+    const params: unknown[] = [];
+
+    if (cafe24Status) {
+      updates.push('cafe24_order_status = ?');
+      params.push(cafe24Status);
+      if (['cancelled', 'returned', 'refunded'].some(s => cafe24Status.includes(s))) {
+        updates.push("order_status = 'cancelled'");
+      } else if (['paid', 'confirmed', 'shipped', 'delivered'].some(s => cafe24Status.includes(s))) {
+        updates.push("order_status = 'confirmed'");
+      }
+    }
+    if (refundAmount > 0) {
+      updates.push('refund_amount = ?');
+      params.push(refundAmount);
+    }
+    if (updates.length > 0) {
+      updates.push('updated_at = ?');
+      params.push(now, existingOrder.id);
+      db.prepare(`UPDATE orders SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+
+    db.prepare('UPDATE cafe24_order_events SET processed = 1 WHERE cafe24_order_id = ? AND processed = 0').run(order.order_id);
     res.sendStatus(200);
     return;
   }
@@ -77,50 +108,72 @@ router.post('/cafe24/webhook', async (req, res) => {
   let channel: string | null = null;
   let contentTitle: string | null = null;
   let commissionRate = 0;
+  let attributionType = 'none';
 
-  if (order.tracking_code) {
+  const trackingCode = order.tracking_code || order.tracking?.utm_source;
+  if (trackingCode) {
     const link = db.prepare(`
       SELECT l.id, l.creator_id, l.product_id, l.channel, l.content_title, p.commission_rate
-      FROM links l
-      JOIN products p ON l.product_id = p.id
-      WHERE l.code = ?
-    `).get(order.tracking_code) as {
-      id: string; creator_id: string; product_id: string;
-      channel: string; content_title: string; commission_rate: number;
-    } | undefined;
+      FROM links l JOIN products p ON l.product_id = p.id
+      WHERE l.code = ? AND l.active = 1
+    `).get(trackingCode) as { id: string; creator_id: string; product_id: string; channel: string; content_title: string; commission_rate: number } | undefined;
 
     if (link) {
-      const recentClick = db.prepare(
-        'SELECT id FROM click_logs WHERE link_id = ? AND created_at >= ? LIMIT 1'
-      ).get(link.id, windowStart.toISOString());
+      linkId = link.id;
+      creatorId = link.creator_id;
+      productId = link.product_id;
+      channel = link.channel;
+      contentTitle = link.content_title;
+      commissionRate = link.commission_rate;
+      attributionType = 'tracking_code';
+    }
+  }
 
-      if (recentClick) {
-        linkId = link.id;
-        creatorId = link.creator_id;
-        productId = link.product_id;
-        channel = link.channel;
-        contentTitle = link.content_title;
-        commissionRate = link.commission_rate;
+  if (!creatorId && order.items) {
+    const productNos = (order.items as { product_no?: string }[]).map(i => i.product_no).filter(Boolean);
+    for (const pno of productNos) {
+      const product = db.prepare('SELECT id, commission_rate FROM products WHERE cafe24_product_code = ?').get(pno) as { id: string; commission_rate: number } | undefined;
+      if (product) {
+        const recentClick = db.prepare(`
+          SELECT l.id, l.creator_id, l.channel, l.content_title
+          FROM click_logs cl JOIN links l ON cl.link_id = l.id
+          WHERE l.product_id = ? AND cl.created_at >= ? AND l.active = 1
+          ORDER BY cl.created_at DESC LIMIT 1
+        `).get(product.id, windowStart.toISOString()) as { id: string; creator_id: string; channel: string; content_title: string } | undefined;
+
+        if (recentClick) {
+          linkId = recentClick.id;
+          creatorId = recentClick.creator_id;
+          productId = product.id;
+          channel = recentClick.channel;
+          contentTitle = recentClick.content_title;
+          commissionRate = product.commission_rate;
+          attributionType = 'click_window';
+          break;
+        }
       }
     }
   }
 
   const orderAmount = parseInt(order.actual_payment_amount || order.order_amount || '0');
   const commission = creatorId ? Math.round(orderAmount * commissionRate) : 0;
-  const now = new Date().toISOString();
 
   db.prepare(
-    'INSERT INTO orders (id, link_id, creator_id, product_id, cafe24_order_id, channel, content_title, amount, order_status, commission, commission_rate, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO orders (id, link_id, creator_id, product_id, cafe24_order_id, channel, content_title, amount, order_status, commission, commission_rate, attribution_type, cafe24_order_status, cafe24_product_no, order_date, payment_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(
     uuidv4(), linkId, creatorId, productId,
     order.order_id, channel, contentTitle,
     orderAmount, 'payment_pending', commission, commissionRate,
+    attributionType, order.order_status || null,
+    order.items?.[0]?.product_no || null,
+    order.order_date || null, order.payment_date || null,
     now, now
   );
 
+  db.prepare('UPDATE cafe24_order_events SET processed = 1 WHERE cafe24_order_id = ? AND processed = 0').run(order.order_id);
+
   addAuditLog(null, 'webhook_order_created', 'order', order.order_id, null, {
-    linkId, creatorId, amount: orderAmount, source: 'cafe24_webhook',
-    event: resource,
+    linkId, creatorId, amount: orderAmount, attributionType, source: 'cafe24_webhook',
   });
 
   res.sendStatus(200);

@@ -12,7 +12,7 @@ interface AuthState {
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginSimple: (nickname: string, pin: string) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<{ pin?: string } | undefined>;
   logout: () => void;
   clearError: () => void;
 }
@@ -77,13 +77,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const register = async (payload: RegisterPayload) => {
+  const register = async (payload: RegisterPayload): Promise<{ pin?: string } | undefined> => {
     setState(s => ({ ...s, error: null, loading: true }));
     try {
       const res = await apiRegister(payload);
       setAccessToken(res.token);
       sessionStorage.setItem('_t', res.token);
       setState({ user: res.user, loading: false, error: null });
+      return { pin: (res as unknown as Record<string, unknown>).pin as string | undefined };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '가입에 실패했습니다.';
       setState(s => ({ ...s, loading: false, error: msg }));

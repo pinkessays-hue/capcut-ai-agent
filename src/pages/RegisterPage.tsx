@@ -9,6 +9,7 @@ const CHANNEL_OPTIONS: ChannelType[] = ['youtube', 'instagram', 'tiktok', 'naver
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
+  const [nickname, setNickname] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
@@ -23,6 +24,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [generatedPin, setGeneratedPin] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
 
@@ -57,13 +59,15 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     try {
-      await register({
+      const res = await register({
         name, email, password, phone, category,
         channels,
         channelOther: channels.includes('other') ? channelOther.trim() : undefined,
+        nickname: nickname.trim() || undefined,
         selectedProducts,
         termsAgreed, privacyAgreed,
       });
+      if (res?.pin) setGeneratedPin(res.pin);
       setSubmitted(true);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '가입에 실패했습니다.');
@@ -82,6 +86,30 @@ export default function RegisterPage() {
             운영자가 신청 내용을 확인한 뒤 승인해드립니다.<br />
             승인이 완료되면 로그인하여 마케팅 링크를 받을 수 있습니다.
           </p>
+          {generatedPin && nickname.trim() && (
+            <div style={{ background: 'var(--surface-soft)', borderRadius: 12, padding: 20, marginBottom: 24, textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>간편 로그인 정보</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, color: 'var(--steel)' }}>닉네임</span>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{nickname.trim()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, color: 'var(--steel)' }}>PIN</span>
+                <span style={{ fontSize: 24, fontWeight: 700, letterSpacing: '0.3em', fontFamily: 'monospace' }}>{generatedPin}</span>
+              </div>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => { navigator.clipboard.writeText(generatedPin); }}
+                style={{ width: '100%', padding: '8px 0', fontSize: 13 }}
+              >
+                PIN 복사
+              </button>
+              <p style={{ fontSize: 12, color: 'var(--critical)', marginTop: 8, textAlign: 'center' }}>
+                이 PIN은 다시 표시되지 않습니다. 메모해두세요.
+              </p>
+            </div>
+          )}
           <button className="btn-buy" onClick={() => navigate('/login')} style={{ padding: '10px 32px' }}>
             로그인 화면으로
           </button>
@@ -108,6 +136,11 @@ export default function RegisterPage() {
           <div style={{ marginBottom: 16 }}>
             <label className="form-label">이름 *</label>
             <input className="input-field" value={name} onChange={e => setName(e.target.value)} placeholder="홍길동" disabled={submitting} />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label className="form-label">닉네임 <span style={{ fontSize: 11, color: 'var(--stone)', fontWeight: 400 }}>(간편 로그인용, 선택)</span></label>
+            <input className="input-field" value={nickname} onChange={e => setNickname(e.target.value)} placeholder="영문/숫자/한글 2~20자" maxLength={20} disabled={submitting} />
           </div>
 
           <div style={{ marginBottom: 16 }}>

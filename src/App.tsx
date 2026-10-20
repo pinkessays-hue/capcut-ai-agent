@@ -22,6 +22,7 @@ import AdminOrders from './pages/AdminOrders';
 import AdminSettlement from './pages/AdminSettlement';
 import AdminProducts from './pages/AdminProducts';
 import AdminIntegrations from './pages/AdminIntegrations';
+import AdminAnalytics from './pages/AdminAnalytics';
 
 export type ViewMode = 'public' | 'creator' | 'admin';
 
@@ -74,6 +75,7 @@ function AppRoutes() {
           <Route path="/admin/creators" element={<ProtectedRoute requiredRole="admin"><AdminCreators /></ProtectedRoute>} />
           <Route path="/admin/links" element={<ProtectedRoute requiredRole="admin"><AdminLinks /></ProtectedRoute>} />
           <Route path="/admin/orders" element={<ProtectedRoute requiredRole="admin"><AdminOrders /></ProtectedRoute>} />
+          <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AdminAnalytics /></ProtectedRoute>} />
           <Route path="/admin/settlement" element={<ProtectedRoute requiredRole="admin"><AdminSettlement /></ProtectedRoute>} />
           <Route path="/admin/products" element={<ProtectedRoute requiredRole="admin"><AdminProducts /></ProtectedRoute>} />
           <Route path="/admin/integrations" element={<ProtectedRoute requiredRole="admin"><AdminIntegrations /></ProtectedRoute>} />
