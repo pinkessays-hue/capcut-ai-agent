@@ -94,6 +94,12 @@ app.use('/api/creators', creatorRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/integrations', integrationRoutes);
 
+// --- Site info ---
+app.get('/api/site-info', (req, res) => {
+  const siteUrl = process.env.SITE_URL || process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  res.json({ ok: true, data: { siteUrl } });
+});
+
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, env: process.env.NODE_ENV || 'development' });

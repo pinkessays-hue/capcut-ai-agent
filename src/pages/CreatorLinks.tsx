@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getProducts } from '../api/products';
 import { getMyLinks, createLink } from '../api/links';
+import { getSiteUrl } from '../api/client';
 import { formatPercent, formatDate, CHANNEL_LABELS } from '../types';
 import type { Product, AffiliateLink, ChannelType } from '../types';
 
@@ -25,15 +26,17 @@ export default function CreatorLinks() {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [siteUrl, setSiteUrl] = useState('');
 
   const loadData = () => {
     getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
     getMyLinks().then(res => { if (res.data) setLinks(res.data); }).catch(() => {});
   };
 
-  useEffect(() => { loadData(); }, []);
-
-  const baseUrl = window.location.origin;
+  useEffect(() => {
+    loadData();
+    getSiteUrl().then(setSiteUrl).catch(() => {});
+  }, []);
 
   const copyLink = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -171,8 +174,8 @@ export default function CreatorLinks() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {links.map(link => {
             const product = products.find(p => p.id === link.productId);
-            const shortUrl = `${baseUrl}/r/${link.linkCode}`;
             const utmUrl = buildUtmUrl(link);
+            const shortUrl = siteUrl ? `${siteUrl}/r/${link.linkCode}` : null;
 
             return (
               <div key={link.id} className="card" style={{ padding: 16, opacity: link.active ? 1 : 0.6 }}>
@@ -185,26 +188,33 @@ export default function CreatorLinks() {
                   <span style={{ fontSize: 12, color: 'var(--stone)' }}>{formatDate(link.createdAt)}</span>
                 </div>
                 {link.contentTitle && <p style={{ fontSize: 13, color: 'var(--charcoal)', marginBottom: 8 }}>{link.contentTitle}</p>}
-                <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
-                  단축 링크: <code style={{ background: 'var(--surface-soft)', padding: '2px 6px', borderRadius: 4, fontSize: 11, wordBreak: 'break-all' }}>{shortUrl}</code>
-                  &nbsp;· 수수료율: {formatPercent(link.commissionRateAtCreation)}
-                </div>
                 {utmUrl && (
-                  <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
-                    UTM 링크: <code style={{ background: '#eff6ff', padding: '2px 6px', borderRadius: 4, fontSize: 10, wordBreak: 'break-all', display: 'inline-block', maxWidth: '100%', lineHeight: 1.5 }}>{utmUrl}</code>
+                  <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 6 }}>
+                    <strong style={{ color: 'var(--ink)' }}>마케팅 링크:</strong>
+                    <code style={{ display: 'block', marginTop: 4, background: '#eff6ff', padding: '6px 8px', borderRadius: 6, fontSize: 11, wordBreak: 'break-all', lineHeight: 1.5 }}>{utmUrl}</code>
                   </div>
                 )}
+                {shortUrl && (
+                  <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
+                    클릭 추적 링크: <code style={{ background: 'var(--surface-soft)', padding: '2px 6px', borderRadius: 4, fontSize: 11, wordBreak: 'break-all' }}>{shortUrl}</code>
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: 'var(--steel)', marginBottom: 4 }}>
+                  수수료율: {formatPercent(link.commissionRateAtCreation)}
+                </div>
                 <div style={{ display: 'flex', gap: 16, fontSize: 13, color: 'var(--steel)', marginBottom: 8, flexWrap: 'wrap' }}>
                   <span>클릭 <strong style={{ color: 'var(--ink)' }}>{link.clicks}</strong></span>
                   <span style={{ color: 'var(--stone)' }}>주문: 연동 전</span>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button className="btn-ghost btn-small" onClick={() => copyLink(shortUrl, link.id + '-short')}>
-                    {copiedId === link.id + '-short' ? '복사됨!' : '단축 링크 복사'}
-                  </button>
                   {utmUrl && (
-                    <button className="btn-ghost btn-small" style={{ color: 'var(--primary)' }} onClick={() => copyLink(utmUrl, link.id + '-utm')}>
-                      {copiedId === link.id + '-utm' ? '복사됨!' : 'UTM 링크 복사'}
+                    <button className="btn-buy btn-small" onClick={() => copyLink(utmUrl, link.id + '-utm')}>
+                      {copiedId === link.id + '-utm' ? '복사됨!' : '마케팅 링크 복사'}
+                    </button>
+                  )}
+                  {shortUrl && (
+                    <button className="btn-ghost btn-small" onClick={() => copyLink(shortUrl, link.id + '-short')}>
+                      {copiedId === link.id + '-short' ? '복사됨!' : '추적 링크 복사'}
                     </button>
                   )}
                 </div>

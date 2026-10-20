@@ -58,3 +58,15 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
   delete: <T>(path: string) => request<T>('DELETE', path),
 };
+
+let _siteUrl: string | null = null;
+export async function getSiteUrl(): Promise<string> {
+  if (_siteUrl) return _siteUrl;
+  try {
+    const res = await api.get<{ ok: boolean; data: { siteUrl: string } }>('/site-info');
+    _siteUrl = res.data.siteUrl;
+    return _siteUrl;
+  } catch {
+    return window.location.origin;
+  }
+}

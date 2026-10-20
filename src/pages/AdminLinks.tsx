@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAllLinks, simulateClick, simulateOrder, adminIssueLinks, toggleLinkActive, reissueLink } from '../api/links';
 import { getProducts } from '../api/products';
 import { getAllCreators } from '../api/creators';
+import { getSiteUrl } from '../api/client';
 import { formatPercent, formatDate, CHANNEL_LABELS } from '../types';
 import type { AffiliateLink, Product, Creator } from '../types';
 
@@ -15,8 +16,7 @@ export default function AdminLinks() {
   const [issuing, setIssuing] = useState(false);
   const [issueResult, setIssueResult] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const siteUrl = (window as unknown as Record<string, unknown>).__SITE_URL__ as string || window.location.origin;
+  const [siteUrl, setSiteUrl] = useState('');
 
   const loadData = () => {
     getAllLinks().then(res => { if (res.data) setLinks(res.data); }).catch(() => {});
@@ -24,7 +24,10 @@ export default function AdminLinks() {
     getAllCreators().then(res => { if (res.data) setCreators(res.data); }).catch(() => {});
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => {
+    loadData();
+    getSiteUrl().then(setSiteUrl).catch(() => {});
+  }, []);
 
   const handleIssue = async () => {
     if (!issueCreatorId || issueProductIds.length === 0) return;
