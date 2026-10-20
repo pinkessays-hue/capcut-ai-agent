@@ -193,34 +193,52 @@ router.post('/cafe24/sync', authMiddleware, requireRole('admin'), async (req: Au
     return;
   }
 
-  try {
-    const orders = await cafe24Client.listOrders(accessTokenRow.value, {
-      startDate: new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0],
-      endDate: new Date().toISOString().split('T')[0],
-    });
+  const startDate = (req.body.startDate as string) || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const endDate = (req.body.endDate as string) || new Date().toISOString().split('T')[0];
 
-    let synced = 0;
+  try {
+    const orders = await cafe24Client.listOrders(accessTokenRow.value, { startDate, endDate });
+    let created = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+
     for (const order of orders) {
-      const existing = db.prepare('SELECT id FROM orders WHERE cafe24_order_id = ?').get(order.order_id);
-      if (!existing) {
+      const existing = db.prepare('SELECT id, order_status FROM orders WHERE cafe24_order_id = ?').get(order.order_id) as { id: string; order_status: string } | undefined;
+
+      if (existing) {
+        const amount = parseInt(order.actual_payment_amount || '0');
+        const cafe24Status = order.order_status;
+        let newStatus = existing.order_status;
+        if (cafe24Status && ['cancelled', 'returned', 'refunded'].some(s => cafe24Status.includes(s))) {
+          newStatus = 'cancelled';
+        } else if (cafe24Status && ['paid', 'confirmed', 'shipped', 'delivered'].some(s => cafe24Status.includes(s))) {
+          newStatus = 'confirmed';
+        }
+        db.prepare('UPDATE orders SET amount = ?, order_status = ?, cafe24_order_status = ?, updated_at = ? WHERE id = ?')
+          .run(amount, newStatus, cafe24Status || null, now, existing.id);
+        updated++;
+      } else {
         db.prepare(
-          'INSERT INTO orders (id, link_id, creator_id, product_id, cafe24_order_id, channel, content_title, amount, order_status, commission, commission_rate, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          'INSERT INTO orders (id, link_id, creator_id, product_id, cafe24_order_id, channel, content_title, amount, order_status, commission, commission_rate, attribution_type, cafe24_order_status, order_date, payment_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         ).run(
           uuidv4(), null, null, null,
           order.order_id, null, null,
           parseInt(order.actual_payment_amount || '0'),
           'payment_pending', 0, 0,
-          order.order_date || new Date().toISOString(),
-          new Date().toISOString()
+          'none', order.order_status || null,
+          order.order_date || null, order.payment_date || null,
+          order.order_date || now, now
         );
-        synced++;
+        created++;
       }
     }
 
-    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('cafe24_last_sync', new Date().toISOString());
+    db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('cafe24_last_sync', now);
 
-    addAuditLog(req.user!.id, 'cafe24_order_sync', 'integration', 'cafe24', null, { synced, total: orders.length });
-    res.json({ ok: true, data: { synced } });
+    addAuditLog(req.user!.id, 'cafe24_order_sync', 'integration', 'cafe24', null, {
+      created, updated, total: orders.length, startDate, endDate,
+    });
+    res.json({ ok: true, data: { synced: created, updated, total: orders.length } });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: '주문 동기화 실패', detail: message });

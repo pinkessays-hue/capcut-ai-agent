@@ -7,7 +7,7 @@ import { hashPassword, verifyPassword, generateToken, authMiddleware, AuthReques
 const router = Router();
 
 router.post('/register', (req, res) => {
-  const { email, password, name, phone, category, channels, selectedProducts, termsAgreed, privacyAgreed } = req.body;
+  const { email, password, name, phone, category, channels, selectedProducts, termsAgreed, privacyAgreed, nickname } = req.body;
 
   if (!email || !password || !name) {
     res.status(400).json({ error: '이메일, 비밀번호, 이름은 필수입니다.' });
@@ -34,20 +34,34 @@ router.post('/register', (req, res) => {
     return;
   }
 
+  let nicknameVal: string | null = null;
+  let pinHash: string | null = null;
+  let generatedPin: string | null = null;
+  if (nickname && typeof nickname === 'string' && nickname.trim().length >= 2) {
+    nicknameVal = nickname.trim();
+    const existingNick = db.prepare('SELECT id FROM users WHERE nickname = ?').get(nicknameVal);
+    if (existingNick) {
+      res.status(409).json({ error: '이미 사용 중인 닉네임입니다.' });
+      return;
+    }
+    generatedPin = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    pinHash = hashPassword(generatedPin);
+  }
+
   const now = new Date().toISOString();
   const userId = uuidv4();
   const creatorId = uuidv4();
   const passwordHash = hashPassword(password);
 
   const insertUser = db.prepare(
-    'INSERT INTO users (id, email, password_hash, name, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO users (id, email, password_hash, name, role, status, nickname, pin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
   const insertCreator = db.prepare(
     'INSERT INTO creators (id, user_id, display_name, phone, category, channels, selected_products, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
   const txn = db.transaction(() => {
-    insertUser.run(userId, email, passwordHash, name, 'creator', 'active', now);
+    insertUser.run(userId, email, passwordHash, name, 'creator', 'active', nicknameVal, pinHash, now);
     insertCreator.run(
       creatorId, userId, name, phone || '', category || '',
       JSON.stringify(channels || []),
@@ -69,7 +83,8 @@ router.post('/register', (req, res) => {
   res.status(201).json({
     ok: true,
     token,
-    user: { id: userId, email, name, role: 'creator', creatorId, creatorStatus: 'pending' },
+    pin: generatedPin || undefined,
+    user: { id: userId, email, name, role: 'creator', nickname: nicknameVal, creatorId, creatorStatus: 'pending' },
   });
 });
 

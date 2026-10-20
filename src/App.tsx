@@ -23,6 +23,7 @@ import AdminSettlement from './pages/AdminSettlement';
 import AdminProducts from './pages/AdminProducts';
 import AdminIntegrations from './pages/AdminIntegrations';
 import AdminAnalytics from './pages/AdminAnalytics';
+import AdminAnalytics from './pages/AdminAnalytics';
 
 export type ViewMode = 'public' | 'creator' | 'admin';
 
@@ -79,6 +80,7 @@ function AppRoutes() {
           <Route path="/admin/settlement" element={<ProtectedRoute requiredRole="admin"><AdminSettlement /></ProtectedRoute>} />
           <Route path="/admin/products" element={<ProtectedRoute requiredRole="admin"><AdminProducts /></ProtectedRoute>} />
           <Route path="/admin/integrations" element={<ProtectedRoute requiredRole="admin"><AdminIntegrations /></ProtectedRoute>} />
+          <Route path="/admin/analytics" element={<ProtectedRoute requiredRole="admin"><AdminAnalytics /></ProtectedRoute>} />
         </Routes>
       </main>
       {!isLanding && !isAuth && (
