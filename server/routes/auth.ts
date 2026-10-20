@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { getDb, generateLinkCode } from '../db';
+import { getDb } from '../db';
 import { hashPassword, verifyPassword, generateToken, authMiddleware, AuthRequest } from '../auth';
 
 const router = Router();
 
 router.post('/register', (req, res) => {
-  const { email, password, name, phone, category, channels, termsAgreed, privacyAgreed } = req.body;
+  const { email, password, name, phone, category, channels, selectedProducts, termsAgreed, privacyAgreed } = req.body;
 
   if (!email || !password || !name) {
     res.status(400).json({ error: '이메일, 비밀번호, 이름은 필수입니다.' });
@@ -19,6 +19,10 @@ router.post('/register', (req, res) => {
   }
   if (!termsAgreed || !privacyAgreed) {
     res.status(400).json({ error: '필수 약관에 동의해야 합니다.' });
+    return;
+  }
+  if (!selectedProducts || !Array.isArray(selectedProducts) || selectedProducts.length === 0) {
+    res.status(400).json({ error: '홍보 희망 상품을 1개 이상 선택해주세요.' });
     return;
   }
 
@@ -39,26 +43,17 @@ router.post('/register', (req, res) => {
     'INSERT INTO users (id, email, password_hash, name, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
   const insertCreator = db.prepare(
-    'INSERT INTO creators (id, user_id, display_name, phone, category, channels, status, created_at, approved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    'INSERT INTO creators (id, user_id, display_name, phone, category, channels, selected_products, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
   const txn = db.transaction(() => {
     insertUser.run(userId, email, passwordHash, name, 'creator', 'active', now);
     insertCreator.run(
       creatorId, userId, name, phone || '', category || '',
-      JSON.stringify(channels || []), 'active', now, now
+      JSON.stringify(channels || []),
+      JSON.stringify(selectedProducts),
+      'pending', now
     );
-
-    const products = db.prepare("SELECT id FROM products WHERE sale_status = 'active' AND info_ready = 1").all() as { id: string }[];
-    const insertLink = db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-
-    for (const product of products) {
-      let code = generateLinkCode();
-      while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
-        code = generateLinkCode();
-      }
-      insertLink.run(uuidv4(), code, creatorId, product.id, 'direct', '자동 발급 링크', now);
-    }
   });
 
   try {
@@ -74,7 +69,7 @@ router.post('/register', (req, res) => {
   res.status(201).json({
     ok: true,
     token,
-    user: { id: userId, email, name, role: 'creator', creatorId },
+    user: { id: userId, email, name, role: 'creator', creatorId, creatorStatus: 'pending' },
   });
 });
 
@@ -100,13 +95,19 @@ router.post('/login', (req, res) => {
   }
 
   let creatorId: string | null = null;
+  let creatorStatus: string | null = null;
   if (user.role === 'creator') {
-    const creator = db.prepare('SELECT id, status FROM creators WHERE user_id = ?').get(user.id) as { id: string; status: string } | undefined;
+    const creator = db.prepare('SELECT id, status, rejection_reason FROM creators WHERE user_id = ?').get(user.id) as { id: string; status: string; rejection_reason: string | null } | undefined;
     if (creator?.status === 'suspended') {
       res.status(403).json({ error: '정지된 크리에이터 계정입니다. 운영자에게 문의하세요.' });
       return;
     }
+    if (creator?.status === 'rejected') {
+      res.status(403).json({ error: `신청이 반려되었습니다.${creator.rejection_reason ? ' 사유: ' + creator.rejection_reason : ''} 문의가 필요하면 운영자에게 연락해주세요.` });
+      return;
+    }
     creatorId = creator?.id || null;
+    creatorStatus = creator?.status || null;
   }
 
   const token = generateToken(user.id, user.role);
@@ -114,7 +115,7 @@ router.post('/login', (req, res) => {
   res.json({
     ok: true,
     token,
-    user: { id: user.id, email: user.email, name: user.name, role: user.role, creatorId },
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, creatorId, creatorStatus },
   });
 });
 
@@ -188,14 +189,17 @@ router.get('/me', authMiddleware, (req: AuthRequest, res) => {
   }
 
   let creatorId: string | null = null;
+  let creatorStatus: string | null = null;
   let creatorInfo = null;
   if (user.role === 'creator') {
     const creator = db.prepare('SELECT * FROM creators WHERE user_id = ?').get(user.id) as Record<string, unknown> | undefined;
     if (creator) {
       creatorId = creator.id as string;
+      creatorStatus = creator.status as string;
       creatorInfo = {
         ...creator,
         channels: JSON.parse(creator.channels as string || '[]'),
+        selected_products: JSON.parse(creator.selected_products as string || '[]'),
       };
     }
   }
@@ -208,6 +212,7 @@ router.get('/me', authMiddleware, (req: AuthRequest, res) => {
       name: user.name,
       role: user.role,
       creatorId,
+      creatorStatus,
     },
     creator: creatorInfo,
   });

@@ -11,7 +11,14 @@ export const CHANNEL_LABELS: Record<ChannelType, string> = {
 };
 
 // ── Creator ──
-export type CreatorStatus = 'active' | 'suspended';
+export type CreatorStatus = 'active' | 'suspended' | 'pending' | 'rejected';
+
+export const CREATOR_STATUS_LABELS: Record<CreatorStatus, string> = {
+  pending: '승인 대기',
+  active: '활성',
+  suspended: '정지',
+  rejected: '반려',
+};
 
 export interface Creator {
   id: string;
@@ -22,6 +29,8 @@ export interface Creator {
   category: string;
   channels: ChannelType[];
   channelOther?: string;
+  selectedProducts?: string[];
+  rejectionReason?: string;
   status: CreatorStatus;
   createdAt: string;
 }
@@ -30,12 +39,14 @@ export interface Creator {
 export interface Product {
   id: string;
   name: string;
+  originalName?: string;
   description: string;
   price: number;
   commissionRate: number;
   imageUrl?: string;
+  productUrl?: string;
   infoReady: boolean;
-  saleStatus: 'on_sale' | 'preparing' | 'discontinued';
+  saleStatus: 'active' | 'inactive' | 'preparing';
   createdAt: string;
 }
 
@@ -51,6 +62,7 @@ export interface AffiliateLink {
   clicks: number;
   commissionRateAtCreation: number;
   active: boolean;
+  issuedBy?: string;
   createdAt: string;
 }
 
@@ -152,6 +164,7 @@ export interface User {
   name: string;
   role: UserRole;
   creatorId?: string;
+  creatorStatus?: CreatorStatus;
 }
 
 // ── Integration Status ──

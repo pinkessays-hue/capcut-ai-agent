@@ -42,7 +42,9 @@ function initSchema(): void {
       phone TEXT,
       category TEXT,
       channels TEXT DEFAULT '[]',
-      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','suspended')),
+      selected_products TEXT DEFAULT '[]',
+      rejection_reason TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','active','suspended','rejected')),
       created_at TEXT NOT NULL,
       approved_at TEXT
     );
@@ -50,8 +52,10 @@ function initSchema(): void {
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      original_name TEXT DEFAULT '',
       description TEXT DEFAULT '',
       image_placeholder TEXT DEFAULT '',
+      product_url TEXT DEFAULT '',
       cafe24_product_code TEXT DEFAULT '',
       cafe24_secret_url TEXT DEFAULT '',
       commission_rate REAL NOT NULL DEFAULT 0,
@@ -69,6 +73,8 @@ function initSchema(): void {
       product_id TEXT NOT NULL REFERENCES products(id),
       channel TEXT NOT NULL,
       content_title TEXT DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1,
+      issued_by TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -160,6 +166,65 @@ function initSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_settlements_creator ON settlements(creator_id);
     CREATE INDEX IF NOT EXISTS idx_audit_log_target ON audit_log(target_type, target_id);
   `);
+
+  migrateSchema(d);
+}
+
+function migrateSchema(d: Database.Database): void {
+  const hasCol = (table: string, col: string) => {
+    const info = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return info.some(c => c.name === col);
+  };
+
+  if (!hasCol('products', 'original_name')) {
+    d.exec(`ALTER TABLE products ADD COLUMN original_name TEXT DEFAULT ''`);
+  }
+  if (!hasCol('products', 'product_url')) {
+    d.exec(`ALTER TABLE products ADD COLUMN product_url TEXT DEFAULT ''`);
+  }
+  if (!hasCol('creators', 'selected_products')) {
+    d.exec(`ALTER TABLE creators ADD COLUMN selected_products TEXT DEFAULT '[]'`);
+  }
+  if (!hasCol('creators', 'rejection_reason')) {
+    d.exec(`ALTER TABLE creators ADD COLUMN rejection_reason TEXT`);
+  }
+  if (!hasCol('links', 'active')) {
+    d.exec(`ALTER TABLE links ADD COLUMN active INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!hasCol('links', 'issued_by')) {
+    d.exec(`ALTER TABLE links ADD COLUMN issued_by TEXT`);
+  }
+
+  const creatorInfo = d.prepare(`PRAGMA table_info(creators)`).all() as { name: string; type: string }[];
+  const statusCol = creatorInfo.find(c => c.name === 'status');
+  if (statusCol) {
+    try {
+      d.exec(`INSERT INTO creators (id, user_id, display_name, status, created_at) VALUES ('__migrate_test', '__mt', 'test', 'pending', '2024-01-01')`);
+      d.exec(`DELETE FROM creators WHERE id = '__migrate_test'`);
+    } catch {
+      d.exec(`
+        CREATE TABLE creators_new (
+          id TEXT PRIMARY KEY,
+          user_id TEXT UNIQUE NOT NULL REFERENCES users(id),
+          display_name TEXT NOT NULL,
+          phone TEXT,
+          category TEXT,
+          channels TEXT DEFAULT '[]',
+          selected_products TEXT DEFAULT '[]',
+          rejection_reason TEXT,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','active','suspended','rejected')),
+          created_at TEXT NOT NULL,
+          approved_at TEXT
+        );
+        INSERT INTO creators_new (id, user_id, display_name, phone, category, channels, selected_products, rejection_reason, status, created_at, approved_at)
+          SELECT id, user_id, display_name, phone, category, channels,
+            COALESCE(selected_products, '[]'), rejection_reason, status, created_at, approved_at
+          FROM creators;
+        DROP TABLE creators;
+        ALTER TABLE creators_new RENAME TO creators;
+      `);
+    }
+  }
 }
 
 export function seedDatabase(): void {
@@ -177,11 +242,27 @@ export function seedDatabase(): void {
   const existingProducts = d.prepare('SELECT COUNT(*) as cnt FROM products').get() as { cnt: number };
   if (existingProducts.cnt === 0) {
     const insertProduct = d.prepare(
-      'INSERT INTO products (id, name, description, image_placeholder, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    insertProduct.run('prod_1', '포미 리프트업 침대', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', '', '', 0.05, 'active', 1, 890000, now, now);
-    insertProduct.run('prod_2', '리클라이너 소파', '', 'sofa', '', '', 0.04, 'preparing', 0, 0, now, now);
-    insertProduct.run('prod_3', '휴고 플립', '접이식 디자인으로 좁은 공간에서도 편안한 휴식. 컴팩트하게 접어 보관 가능.', 'chair', '', '', 0.06, 'active', 1, 450000, now, now);
+    insertProduct.run('prod_1', '포미 리프트업 침대', '포미 2단 리프트업 침대 엠보형 LK', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=303&cate_no=35&display_group=1', '', '', 0.05, 'active', 1, 890000, now, now);
+    insertProduct.run('prod_2', '리클라이너 소파', '', '', 'sofa', '', '', '', 0.04, 'preparing', 0, 0, now, now);
+    insertProduct.run('prod_3', '휴고 플립', '', '접이식 디자인으로 좁은 공간에서도 편안한 휴식. 컴팩트하게 접어 보관 가능.', 'chair', '', '', '', 0.06, 'active', 1, 450000, now, now);
+    insertProduct.run('prod_4', '네어 리프트업 침대', '쉬어 네오 리프트업 침대 SS/K', '리프트업 수납 침대의 새로운 기준. 심플한 디자인에 넉넉한 수납 공간.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=302&cate_no=54&display_group=1', '', '', 0.05, 'active', 1, 790000, now, now);
+  } else {
+    const prod1 = d.prepare('SELECT id FROM products WHERE id = ?').get('prod_1');
+    if (prod1) {
+      d.prepare("UPDATE products SET original_name = ?, product_url = ? WHERE id = ? AND (original_name = '' OR original_name IS NULL)").run(
+        '포미 2단 리프트업 침대 엠보형 LK',
+        'https://homeandheal.co.kr/product/detail.html?product_no=303&cate_no=35&display_group=1',
+        'prod_1'
+      );
+    }
+    const prod4 = d.prepare('SELECT id FROM products WHERE id = ?').get('prod_4');
+    if (!prod4) {
+      d.prepare(
+        'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run('prod_4', '네어 리프트업 침대', '쉬어 네오 리프트업 침대 SS/K', '리프트업 수납 침대의 새로운 기준. 심플한 디자인에 넉넉한 수납 공간.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=302&cate_no=54&display_group=1', '', '', 0.05, 'active', 1, 790000, now, now);
+    }
   }
 
   const existingSettings = d.prepare('SELECT COUNT(*) as cnt FROM settings').get() as { cnt: number };

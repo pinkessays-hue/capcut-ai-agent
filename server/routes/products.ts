@@ -10,7 +10,7 @@ router.get('/', optionalAuth, (req: AuthRequest, res) => {
   const isAdmin = req.user?.role === 'admin';
   const cols = isAdmin
     ? '*'
-    : 'id, name, description, image_placeholder, commission_rate, sale_status, info_ready, price, created_at, updated_at';
+    : 'id, name, original_name, description, image_placeholder, product_url, commission_rate, sale_status, info_ready, price, created_at, updated_at';
   const products = db.prepare(`SELECT ${cols} FROM products ORDER BY created_at`).all();
   res.json({ ok: true, data: products });
 });
@@ -20,7 +20,7 @@ router.get('/:id', optionalAuth, (req: AuthRequest, res) => {
   const isAdmin = req.user?.role === 'admin';
   const cols = isAdmin
     ? '*'
-    : 'id, name, description, image_placeholder, commission_rate, sale_status, info_ready, price, created_at, updated_at';
+    : 'id, name, original_name, description, image_placeholder, product_url, commission_rate, sale_status, info_ready, price, created_at, updated_at';
   const product = db.prepare(`SELECT ${cols} FROM products WHERE id = ?`).get(req.params.id);
   if (!product) {
     res.status(404).json({ error: '상품을 찾을 수 없습니다.' });
@@ -30,7 +30,7 @@ router.get('/:id', optionalAuth, (req: AuthRequest, res) => {
 });
 
 router.post('/', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
-  const { name, description, image_placeholder, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price } = req.body;
+  const { name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price } = req.body;
   if (!name) {
     res.status(400).json({ error: '상품명은 필수입니다.' });
     return;
@@ -41,8 +41,8 @@ router.post('/', authMiddleware, requireRole('admin'), (req: AuthRequest, res) =
   const id = uuidv4();
 
   db.prepare(
-    'INSERT INTO products (id, name, description, image_placeholder, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, name, description || '', image_placeholder || '', cafe24_product_code || '', cafe24_secret_url || '', commission_rate || 0, sale_status || 'active', info_ready ? 1 : 0, price || 0, now, now);
+    'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, name, original_name || '', description || '', image_placeholder || '', product_url || '', cafe24_product_code || '', cafe24_secret_url || '', commission_rate || 0, sale_status || 'active', info_ready ? 1 : 0, price || 0, now, now);
 
   addAuditLog(req.user!.id, 'product_create', 'product', id, null, { name, sale_status });
 
@@ -58,7 +58,7 @@ router.put('/:id', authMiddleware, requireRole('admin'), (req: AuthRequest, res)
     return;
   }
 
-  const fields = ['name', 'description', 'image_placeholder', 'cafe24_product_code', 'cafe24_secret_url', 'commission_rate', 'sale_status', 'info_ready', 'price'];
+  const fields = ['name', 'original_name', 'description', 'image_placeholder', 'product_url', 'cafe24_product_code', 'cafe24_secret_url', 'commission_rate', 'sale_status', 'info_ready', 'price'];
   const updates: string[] = [];
   const values: unknown[] = [];
 

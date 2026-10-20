@@ -32,14 +32,19 @@ app.use(cookieParser());
 app.get('/r/:code', (req, res) => {
   const db = getDb();
   const link = db.prepare(`
-    SELECT l.id, l.product_id, p.cafe24_secret_url
+    SELECT l.id, l.active, l.product_id, p.cafe24_secret_url, p.product_url
     FROM links l
     JOIN products p ON l.product_id = p.id
     WHERE l.code = ?
-  `).get(req.params.code) as { id: string; product_id: string; cafe24_secret_url: string } | undefined;
+  `).get(req.params.code) as { id: string; active: number; product_id: string; cafe24_secret_url: string; product_url: string } | undefined;
 
   if (!link) {
     res.status(404).send('링크를 찾을 수 없습니다.');
+    return;
+  }
+
+  if (!link.active) {
+    res.status(410).send('비활성화된 링크입니다.');
     return;
   }
 
@@ -60,9 +65,11 @@ app.get('/r/:code', (req, res) => {
 
   if (link.cafe24_secret_url) {
     res.redirect(302, link.cafe24_secret_url);
+  } else if (link.product_url) {
+    res.redirect(302, link.product_url);
   } else {
-    const baseUrl = process.env.BASE_URL || `http://localhost:${PORT}`;
-    res.redirect(302, `${baseUrl}/#/creator/products`);
+    const siteUrl = process.env.SITE_URL || process.env.BASE_URL || `http://localhost:${PORT}`;
+    res.redirect(302, siteUrl);
   }
 });
 

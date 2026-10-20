@@ -9,15 +9,24 @@ function mapCreator(c: Record<string, unknown>): Creator {
     try { parsedChannels = JSON.parse(channels); } catch { parsedChannels = []; }
   }
 
+  let selectedProducts: string[] = [];
+  const sp = c.selected_products ?? c.selectedProducts;
+  if (Array.isArray(sp)) selectedProducts = sp as string[];
+  else if (typeof sp === 'string') {
+    try { selectedProducts = JSON.parse(sp); } catch { selectedProducts = []; }
+  }
+
   return {
     id: c.id as string,
     userId: (c.user_id ?? c.userId ?? '') as string,
-    name: c.name as string,
+    name: c.name as string || (c.display_name as string) || '',
     email: c.email as string,
     phone: (c.phone ?? '') as string,
     category: (c.category ?? '') as string,
     channels: parsedChannels,
     channelOther: (c.channel_other ?? c.channelOther) as string | undefined,
+    selectedProducts,
+    rejectionReason: (c.rejection_reason ?? c.rejectionReason) as string | undefined,
     status: (c.status ?? 'active') as CreatorStatus,
     createdAt: (c.created_at ?? c.createdAt ?? '') as string,
   };
@@ -49,6 +58,18 @@ export async function getAllCreators(): Promise<ApiResponse<Creator[]>> {
 
 export async function updateCreatorStatus(id: string, status: CreatorStatus, reason?: string): Promise<ApiResponse<Creator>> {
   const raw = await api.patch<{ ok: boolean; data: Record<string, unknown> }>(`/creators/${id}/status`, { status, reason });
+  if (raw.data) return { ok: true, data: mapCreator(raw.data) };
+  return { ok: true };
+}
+
+export async function approveCreator(id: string): Promise<ApiResponse<Creator>> {
+  const raw = await api.patch<{ ok: boolean; data: Record<string, unknown> }>(`/creators/${id}/approve`, {});
+  if (raw.data) return { ok: true, data: mapCreator(raw.data) };
+  return { ok: true };
+}
+
+export async function rejectCreator(id: string, reason?: string): Promise<ApiResponse<Creator>> {
+  const raw = await api.patch<{ ok: boolean; data: Record<string, unknown> }>(`/creators/${id}/reject`, { reason });
   if (raw.data) return { ok: true, data: mapCreator(raw.data) };
   return { ok: true };
 }

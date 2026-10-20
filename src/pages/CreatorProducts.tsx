@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { getProducts } from '../api/products';
 import { formatKRW } from '../types';
 import type { Product } from '../types';
@@ -7,7 +6,6 @@ import ProductImage from '../components/ProductImage';
 
 export default function CreatorProducts() {
   const [products, setProducts] = useState<Product[]>([]);
-  const navigate = useNavigate();
 
   useEffect(() => {
     getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
@@ -27,7 +25,7 @@ export default function CreatorProducts() {
               <div style={{ padding: 16 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>
                   {p.name}
-                  {p.saleStatus !== 'on_sale' && (
+                  {p.saleStatus !== 'active' && (
                     <span className="badge badge-pending" style={{ marginLeft: 8 }}>
                       {p.saleStatus === 'preparing' ? '준비 중' : '판매 종료'}
                     </span>
@@ -40,10 +38,11 @@ export default function CreatorProducts() {
                       <span style={{ fontWeight: 700 }}>{formatKRW(p.price)}</span>
                       <span className="badge badge-info">수수료 {(p.commissionRate * 100).toFixed(0)}%</span>
                     </div>
-                    {p.saleStatus === 'on_sale' && (
-                      <button className="btn-buy" style={{ width: '100%' }} onClick={() => navigate('/creator/links', { state: { productId: p.id } })}>
-                        링크 발급하기
-                      </button>
+                    {p.saleStatus === 'active' && p.productUrl && (
+                      <a href={p.productUrl} target="_blank" rel="noopener noreferrer"
+                        className="btn-ghost" style={{ width: '100%', display: 'block', textAlign: 'center', fontSize: 13 }}>
+                        상품 보기
+                      </a>
                     )}
                   </>
                 ) : (

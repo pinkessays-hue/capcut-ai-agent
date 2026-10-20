@@ -20,6 +20,7 @@ function mapLink(l: Record<string, unknown>): AffiliateLink {
     clicks: (l.clicks ?? 0) as number,
     commissionRateAtCreation: (l.commission_rate ?? l.commissionRateAtCreation ?? 0) as number,
     active: l.active !== false && l.active !== 0,
+    issuedBy: (l.issued_by ?? l.issuedBy) as string | undefined,
     createdAt: (l.created_at ?? l.createdAt) as string || '',
   };
 }
@@ -39,8 +40,19 @@ export async function createLink(payload: CreateLinkPayload): Promise<ApiRespons
   return { ok: true, data: mapLink(raw.data) };
 }
 
-export async function toggleLinkActive(_id: string): Promise<ApiResponse<AffiliateLink>> {
-  return { ok: false, error: '링크 활성/비활성 전환은 아직 지원되지 않습니다.' };
+export async function toggleLinkActive(id: string): Promise<ApiResponse<AffiliateLink>> {
+  const raw = await api.patch<{ ok: boolean; data: Record<string, unknown> }>(`/links/${id}/toggle-active`);
+  return { ok: true, data: mapLink(raw.data) };
+}
+
+export async function adminIssueLinks(creatorId: string, productIds: string[]): Promise<ApiResponse<{ productId: string; linkId?: string; code?: string; existing?: boolean; error?: string }[]>> {
+  const raw = await api.post<{ ok: boolean; data: { productId: string; linkId?: string; code?: string; existing?: boolean; error?: string }[] }>('/links/admin-issue', { creatorId, productIds });
+  return { ok: true, data: raw.data };
+}
+
+export async function reissueLink(id: string): Promise<ApiResponse<AffiliateLink>> {
+  const raw = await api.patch<{ ok: boolean; data: Record<string, unknown> }>(`/links/${id}/reissue`);
+  return { ok: true, data: mapLink(raw.data) };
 }
 
 export async function simulateClick(id: string): Promise<ApiResponse> {

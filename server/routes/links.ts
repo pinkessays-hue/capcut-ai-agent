@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { getDb, generateLinkCode, getCreatorBalance } from '../db';
+import { getDb, generateLinkCode, getCreatorBalance, addAuditLog } from '../db';
 import { authMiddleware, requireRole, AuthRequest } from '../auth';
 
 const router = Router();
@@ -93,6 +93,120 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
   `).get(id);
 
   res.status(201).json({ ok: true, data: link });
+});
+
+router.post('/admin-issue', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+  const { creatorId, productIds } = req.body;
+  if (!creatorId || !productIds || !Array.isArray(productIds) || productIds.length === 0) {
+    res.status(400).json({ error: '크리에이터 ID와 상품 목록은 필수입니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const creator = db.prepare('SELECT id, status FROM creators WHERE id = ?').get(creatorId) as { id: string; status: string } | undefined;
+  if (!creator) {
+    res.status(404).json({ error: '크리에이터를 찾을 수 없습니다.' });
+    return;
+  }
+  if (creator.status !== 'active') {
+    res.status(400).json({ error: '승인된 크리에이터에게만 링크를 발급할 수 있습니다.' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const results: { productId: string; linkId: string; code: string; existing: boolean }[] = [];
+
+  const txn = db.transaction(() => {
+    for (const productId of productIds) {
+      const product = db.prepare('SELECT id, sale_status FROM products WHERE id = ?').get(productId) as { id: string; sale_status: string } | undefined;
+      if (!product) continue;
+
+      const existing = db.prepare('SELECT id, code FROM links WHERE creator_id = ? AND product_id = ? AND active = 1').get(creatorId, productId) as { id: string; code: string } | undefined;
+      if (existing) {
+        results.push({ productId, linkId: existing.id, code: existing.code, existing: true });
+        continue;
+      }
+
+      let code = generateLinkCode();
+      while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
+        code = generateLinkCode();
+      }
+
+      const linkId = uuidv4();
+      db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, active, issued_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        linkId, code, creatorId, productId, 'direct', '', 1, req.user!.id, now
+      );
+      results.push({ productId, linkId, code, existing: false });
+    }
+  });
+
+  try {
+    txn();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: '링크 발급 중 오류가 발생했습니다.', detail: message });
+    return;
+  }
+
+  addAuditLog(req.user!.id, 'links_admin_issue', 'creator', creatorId, null, { productIds, results });
+
+  const links = db.prepare(`
+    SELECT l.*, c.display_name as creator_name, p.name as product_name,
+      (SELECT COUNT(*) FROM click_logs WHERE link_id = l.id) as clicks
+    FROM links l
+    JOIN creators c ON l.creator_id = c.id
+    JOIN products p ON l.product_id = p.id
+    WHERE l.creator_id = ? AND l.active = 1
+    ORDER BY l.created_at DESC
+  `).all(creatorId);
+
+  res.status(201).json({ ok: true, data: links, issued: results });
+});
+
+router.patch('/:id/toggle-active', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+  const db = getDb();
+  const link = db.prepare('SELECT * FROM links WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!link) {
+    res.status(404).json({ error: '링크를 찾을 수 없습니다.' });
+    return;
+  }
+
+  const newActive = link.active === 1 ? 0 : 1;
+  db.prepare('UPDATE links SET active = ? WHERE id = ?').run(newActive, req.params.id);
+
+  addAuditLog(req.user!.id, 'link_toggle_active', 'link', req.params.id, { active: link.active }, { active: newActive });
+
+  res.json({ ok: true, data: { ...link, active: newActive } });
+});
+
+router.patch('/:id/reissue', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+  const db = getDb();
+  const link = db.prepare('SELECT * FROM links WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!link) {
+    res.status(404).json({ error: '링크를 찾을 수 없습니다.' });
+    return;
+  }
+
+  let code = generateLinkCode();
+  while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
+    code = generateLinkCode();
+  }
+
+  const oldCode = link.code;
+  db.prepare('UPDATE links SET code = ?, active = 1 WHERE id = ?').run(code, req.params.id);
+
+  addAuditLog(req.user!.id, 'link_reissue', 'link', req.params.id, { code: oldCode }, { code });
+
+  const updated = db.prepare(`
+    SELECT l.*, c.display_name as creator_name, p.name as product_name,
+      (SELECT COUNT(*) FROM click_logs WHERE link_id = l.id) as clicks
+    FROM links l
+    JOIN creators c ON l.creator_id = c.id
+    JOIN products p ON l.product_id = p.id
+    WHERE l.id = ?
+  `).get(req.params.id);
+
+  res.json({ ok: true, data: updated });
 });
 
 router.get('/:id/stats', authMiddleware, (req: AuthRequest, res) => {

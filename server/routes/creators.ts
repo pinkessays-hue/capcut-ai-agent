@@ -63,6 +63,7 @@ router.get('/me', authMiddleware, (req: AuthRequest, res) => {
     data: {
       ...creator,
       channels: JSON.parse(creator.channels as string || '[]'),
+      selected_products: JSON.parse(creator.selected_products as string || '[]'),
     },
   });
 });
@@ -130,6 +131,7 @@ router.get('/', authMiddleware, requireRole('admin'), (_req, res) => {
     data: creators.map((c: Record<string, unknown>) => ({
       ...c,
       channels: JSON.parse(c.channels as string || '[]'),
+      selected_products: JSON.parse(c.selected_products as string || '[]'),
     })),
   });
 });
@@ -161,6 +163,7 @@ router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
     data: {
       ...creator,
       channels: JSON.parse(creator.channels as string || '[]'),
+      selected_products: JSON.parse(creator.selected_products as string || '[]'),
     },
   });
 });
@@ -197,6 +200,75 @@ router.patch('/:id/status', authMiddleware, requireRole('admin'), (req: AuthRequ
     data: {
       ...updated,
       channels: JSON.parse(updated.channels as string || '[]'),
+      selected_products: JSON.parse(updated.selected_products as string || '[]'),
+    },
+  });
+});
+
+router.patch('/:id/approve', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+  const db = getDb();
+  const creator = db.prepare('SELECT * FROM creators WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!creator) {
+    res.status(404).json({ error: '크리에이터를 찾을 수 없습니다.' });
+    return;
+  }
+  if (creator.status !== 'pending') {
+    res.status(400).json({ error: '대기 중인 신청만 승인할 수 있습니다.' });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  db.prepare('UPDATE creators SET status = ?, approved_at = ? WHERE id = ?').run('active', now, req.params.id);
+
+  addAuditLog(req.user!.id, 'creator_approve', 'creator', req.params.id, { status: 'pending' }, { status: 'active' });
+
+  const updated = db.prepare(`
+    SELECT c.*, u.email
+    FROM creators c
+    JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `).get(req.params.id) as Record<string, unknown>;
+
+  res.json({
+    ok: true,
+    data: {
+      ...updated,
+      channels: JSON.parse(updated.channels as string || '[]'),
+      selected_products: JSON.parse(updated.selected_products as string || '[]'),
+    },
+  });
+});
+
+router.patch('/:id/reject', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
+  const { reason } = req.body;
+  const db = getDb();
+  const creator = db.prepare('SELECT * FROM creators WHERE id = ?').get(req.params.id) as Record<string, unknown> | undefined;
+  if (!creator) {
+    res.status(404).json({ error: '크리에이터를 찾을 수 없습니다.' });
+    return;
+  }
+  if (creator.status !== 'pending') {
+    res.status(400).json({ error: '대기 중인 신청만 반려할 수 있습니다.' });
+    return;
+  }
+
+  db.prepare('UPDATE creators SET status = ?, rejection_reason = ? WHERE id = ?').run('rejected', reason || null, req.params.id);
+
+  addAuditLog(req.user!.id, 'creator_reject', 'creator', req.params.id, { status: 'pending' }, { status: 'rejected', reason });
+
+  const updated = db.prepare(`
+    SELECT c.*, u.email
+    FROM creators c
+    JOIN users u ON c.user_id = u.id
+    WHERE c.id = ?
+  `).get(req.params.id) as Record<string, unknown>;
+
+  res.json({
+    ok: true,
+    data: {
+      ...updated,
+      channels: JSON.parse(updated.channels as string || '[]'),
+      selected_products: JSON.parse(updated.selected_products as string || '[]'),
     },
   });
 });

@@ -15,6 +15,7 @@ export interface RegisterPayload {
   category: string;
   channels: ChannelType[];
   channelOther?: string;
+  selectedProducts: string[];
   termsAgreed: boolean;
   privacyAgreed: boolean;
 }
