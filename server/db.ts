@@ -202,6 +202,8 @@ function migrateSchema(d: Database.Database): void {
       d.exec(`INSERT INTO creators (id, user_id, display_name, status, created_at) VALUES ('__migrate_test', '__mt', 'test', 'pending', '2024-01-01')`);
       d.exec(`DELETE FROM creators WHERE id = '__migrate_test'`);
     } catch {
+      d.exec(`PRAGMA foreign_keys = OFF`);
+      d.exec(`DROP TABLE IF EXISTS creators_new`);
       d.exec(`
         CREATE TABLE creators_new (
           id TEXT PRIMARY KEY,
@@ -223,6 +225,7 @@ function migrateSchema(d: Database.Database): void {
         DROP TABLE creators;
         ALTER TABLE creators_new RENAME TO creators;
       `);
+      d.exec(`PRAGMA foreign_keys = ON`);
     }
   }
 }
