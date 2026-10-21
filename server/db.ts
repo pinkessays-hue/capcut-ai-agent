@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { hashSync } from 'bcryptjs';
@@ -6,16 +6,16 @@ import { v4 as uuidv4 } from 'uuid';
 
 const DB_PATH = process.env.DB_PATH || path.join(process.cwd(), 'data', 'hnhs.db');
 
-let db: Database.Database;
+let db: DatabaseSync;
 
-export function getDb(): Database.Database {
+export function getDb(): DatabaseSync {
   if (!db) {
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
+    db = new DatabaseSync(DB_PATH);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.exec('PRAGMA foreign_keys = ON');
     initSchema();
   }
   return db;
@@ -181,7 +181,7 @@ function initSchema(): void {
   migrateSchema(d);
 }
 
-function migrateSchema(d: Database.Database): void {
+function migrateSchema(d: DatabaseSync): void {
   const hasCol = (table: string, col: string) => {
     const info = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
     return info.some(c => c.name === col);
@@ -312,7 +312,7 @@ export function seedDatabase(): void {
   }
 }
 
-function seedTestData(d: Database.Database, now: string): void {
+function seedTestData(d: DatabaseSync, now: string): void {
   const existingTestCreators = d.prepare("SELECT COUNT(*) as cnt FROM users WHERE email LIKE '%@example.com'").get() as { cnt: number };
   if (existingTestCreators.cnt > 0) return;
 
