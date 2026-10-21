@@ -7,15 +7,17 @@ interface ProductImageProps {
 }
 
 const COLORS: Record<string, string> = {
-  '포미 리프트업 침대': '#e8d5c4',
-  '리클라이너 소파': '#d5dce8',
-  '휴고 플립': '#c4e8d5',
+  '포미 2단 리프트업 침대': '#e8d5c4',
+  '홈앤힐 무드랙 시스템장': '#d5dce8',
+  '홈앤힐 미니랩 높이각도조절 책상': '#e8e4d5',
+  '홈앤힐 포그 구스 모듈소파': '#d5e8df',
 };
 
 const ICONS: Record<string, string> = {
-  '포미 리프트업 침대': '🛏️',
-  '리클라이너 소파': '🛋️',
-  '휴고 플립': '💺',
+  '포미 2단 리프트업 침대': '🛏️',
+  '홈앤힐 무드랙 시스템장': '🗄️',
+  '홈앤힐 미니랩 높이각도조절 책상': '🪑',
+  '홈앤힐 포그 구스 모듈소파': '🛋️',
 };
 
 export default function ProductImage({ product, size, rounded = '0' }: ProductImageProps) {

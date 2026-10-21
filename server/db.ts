@@ -294,25 +294,10 @@ export function seedDatabase(): void {
     const insertProduct = d.prepare(
       'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
-    insertProduct.run('prod_1', '포미 리프트업 침대', '포미 2단 리프트업 침대 엠보형 LK', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', 'https://homeandheal01.cafe24.com/product/detail.html?product_no=303&cate_no=35&display_group=1', '', '', 0.05, 'active', 1, 890000, now, now);
-    insertProduct.run('prod_2', '리클라이너 소파', '', '', 'sofa', '', '', '', 0.04, 'preparing', 0, 0, now, now);
-    insertProduct.run('prod_3', '휴고 플립', '', '접이식 디자인으로 좁은 공간에서도 편안한 휴식. 컴팩트하게 접어 보관 가능.', 'chair', '', '', '', 0.06, 'active', 1, 450000, now, now);
-    insertProduct.run('prod_4', '네어 리프트업 침대', '쉬어 네오 리프트업 침대 SS/K', '리프트업 수납 침대의 새로운 기준. 심플한 디자인에 넉넉한 수납 공간.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=302&cate_no=54&display_group=1', '', '', 0.05, 'active', 1, 790000, now, now);
-  } else {
-    const prod1 = d.prepare('SELECT id FROM products WHERE id = ?').get('prod_1');
-    if (prod1) {
-      d.prepare("UPDATE products SET original_name = ?, product_url = ? WHERE id = ?").run(
-        '포미 2단 리프트업 침대 엠보형 LK',
-        'https://homeandheal01.cafe24.com/product/detail.html?product_no=303&cate_no=35&display_group=1',
-        'prod_1'
-      );
-    }
-    const prod4 = d.prepare('SELECT id FROM products WHERE id = ?').get('prod_4');
-    if (!prod4) {
-      d.prepare(
-        'INSERT INTO products (id, name, original_name, description, image_placeholder, product_url, cafe24_product_code, cafe24_secret_url, commission_rate, sale_status, info_ready, price, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run('prod_4', '네어 리프트업 침대', '쉬어 네오 리프트업 침대 SS/K', '리프트업 수납 침대의 새로운 기준. 심플한 디자인에 넉넉한 수납 공간.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=302&cate_no=54&display_group=1', '', '', 0.05, 'active', 1, 790000, now, now);
-    }
+    insertProduct.run('prod_1', '포미 2단 리프트업 침대', '포미 2단 리프트업 침대 엠보형 LK', '전동 리프트업 기능으로 편안한 수납과 취침을 동시에. 원터치 리모컨으로 간편 조작.', 'bed', 'https://homeandheal.co.kr/product/detail.html?product_no=303&cate_no=35&display_group=1', '', '', 0.05, 'active', 1, 890000, now, now);
+    insertProduct.run('prod_2', '홈앤힐 무드랙 시스템장', '', '모듈형 수납 시스템으로 공간에 맞게 자유롭게 조합. 깔끔한 정리와 인테리어를 동시에.', 'shelf', 'https://homeandheal.co.kr/product/detail.html?product_no=54&cate_no=28&display_group=1', '', '', 0.05, 'active', 1, 0, now, now);
+    insertProduct.run('prod_3', '홈앤힐 미니랩 높이각도조절 책상', '', '높이와 각도를 자유롭게 조절하는 스마트 책상. 재택근무와 학습에 최적화된 인체공학 설계.', 'desk', 'https://homeandheal.co.kr/product/detail.html?product_no=59&cate_no=28&display_group=1', '', '', 0.05, 'active', 1, 0, now, now);
+    insertProduct.run('prod_4', '홈앤힐 포그 구스 모듈소파', '', '구스다운 충전재로 포근한 착석감. 모듈 구성으로 공간에 맞춰 자유롭게 배치 가능.', 'sofa', 'https://homeandheal.co.kr/product/detail.html?product_no=14&cate_no=28&display_group=1', '', '', 0.05, 'active', 1, 0, now, now);
   }
 
   const existingSettings = d.prepare('SELECT COUNT(*) as cnt FROM settings').get() as { cnt: number };
@@ -367,7 +352,7 @@ function seedTestData(d: Database.Database, now: string): void {
 
   const insertLink = d.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
   insertLink.run(link1Id, 'HN1YT001', creator1Id, 'prod_1', 'youtube', '포미 리프트업 침대 솔직 리뷰', '2024-09-20T10:00:00Z');
-  insertLink.run(link2Id, 'HN1IG002', creator1Id, 'prod_3', 'instagram', '휴고 플립 언박싱', '2024-09-25T14:00:00Z');
+  insertLink.run(link2Id, 'HN1IG002', creator1Id, 'prod_4', 'instagram', '포그 구스 모듈소파 언박싱', '2024-09-25T14:00:00Z');
   insertLink.run(link3Id, 'JS2NB003', creator2Id, 'prod_1', 'naver_blog', '신혼 침실 꾸미기 – 포미 리프트업', '2024-10-05T09:00:00Z');
 
   const insertClick = d.prepare('INSERT INTO click_logs (id, link_id, ip_hash, user_agent, referer, created_at) VALUES (?, ?, ?, ?, ?, ?)');
@@ -390,7 +375,7 @@ function seedTestData(d: Database.Database, now: string): void {
   const insertOrder = d.prepare('INSERT INTO orders (id, link_id, creator_id, product_id, cafe24_order_id, channel, content_title, amount, order_status, commission, commission_rate, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   insertOrder.run(order1Id, link1Id, creator1Id, 'prod_1', 'TEST-ORD-001', 'youtube', '포미 리프트업 침대 솔직 리뷰', 890000, 'confirmed', 44500, 0.05, '2024-09-22T16:30:00Z', '2024-09-22T16:30:00Z');
   insertOrder.run(order2Id, link1Id, creator1Id, 'prod_1', 'TEST-ORD-002', 'youtube', '포미 리프트업 침대 솔직 리뷰', 890000, 'confirmed', 44500, 0.05, '2024-10-01T11:00:00Z', '2024-10-01T11:00:00Z');
-  insertOrder.run(order3Id, link2Id, creator1Id, 'prod_3', 'TEST-ORD-003', 'instagram', '휴고 플립 언박싱', 450000, 'payment_pending', 27000, 0.06, '2024-10-18T09:30:00Z', '2024-10-18T09:30:00Z');
+  insertOrder.run(order3Id, link2Id, creator1Id, 'prod_4', 'TEST-ORD-003', 'instagram', '포그 구스 모듈소파 언박싱', 0, 'payment_pending', 0, 0.05, '2024-10-18T09:30:00Z', '2024-10-18T09:30:00Z');
   insertOrder.run(order4Id, link3Id, creator2Id, 'prod_1', 'TEST-ORD-004', 'naver_blog', '신혼 침실 꾸미기 – 포미 리프트업', 890000, 'cancelled', 0, 0.05, '2024-10-10T14:00:00Z', '2024-10-10T14:00:00Z');
   insertOrder.run(order5Id, link3Id, creator2Id, 'prod_1', 'TEST-ORD-005', 'naver_blog', '신혼 침실 꾸미기 – 포미 리프트업', 890000, 'confirmed', 44500, 0.05, '2024-10-12T10:00:00Z', '2024-10-12T10:00:00Z');
 
