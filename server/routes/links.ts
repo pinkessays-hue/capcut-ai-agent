@@ -99,6 +99,73 @@ router.post('/', authMiddleware, (req: AuthRequest, res) => {
   res.status(201).json({ ok: true, data: link });
 });
 
+router.post('/quick', authMiddleware, (req: AuthRequest, res) => {
+  const { productId, channel } = req.body;
+  if (!productId) {
+    res.status(400).json({ error: '상품 ID는 필수입니다.' });
+    return;
+  }
+
+  const db = getDb();
+  const creator = db.prepare('SELECT id, status FROM creators WHERE user_id = ?').get(req.user!.id) as { id: string; status: string } | undefined;
+  if (!creator) {
+    res.status(404).json({ error: '크리에이터 정보를 찾을 수 없습니다.' });
+    return;
+  }
+  if (creator.status !== 'active') {
+    res.status(403).json({ error: '승인된 크리에이터만 링크를 생성할 수 있습니다.' });
+    return;
+  }
+
+  const product = db.prepare('SELECT id, sale_status, info_ready, product_url FROM products WHERE id = ?').get(productId) as { id: string; sale_status: string; info_ready: number; product_url: string } | undefined;
+  if (!product) {
+    res.status(404).json({ error: '상품을 찾을 수 없습니다.' });
+    return;
+  }
+  if (product.sale_status !== 'active' || !product.info_ready) {
+    res.status(400).json({ error: '현재 링크를 발급할 수 없는 상품입니다.' });
+    return;
+  }
+
+  const existing = db.prepare(`
+    SELECT l.*, p.product_url, c.name_en as creator_name_en,
+      (SELECT COUNT(*) FROM click_logs WHERE link_id = l.id) as clicks
+    FROM links l
+    JOIN products p ON l.product_id = p.id
+    JOIN creators c ON l.creator_id = c.id
+    WHERE l.creator_id = ? AND l.product_id = ? AND l.active = 1
+    ORDER BY l.created_at DESC LIMIT 1
+  `).get(creator.id, productId) as Record<string, unknown> | undefined;
+
+  if (existing) {
+    res.json({ ok: true, data: existing, reused: true });
+    return;
+  }
+
+  let code = generateLinkCode();
+  while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
+    code = generateLinkCode();
+  }
+
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  const linkChannel = channel || 'direct';
+
+  db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, issued_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, code, creator.id, productId, linkChannel, '', req.user!.id, now
+  );
+
+  const link = db.prepare(`
+    SELECT l.*, p.product_url, c.name_en as creator_name_en, 0 as clicks
+    FROM links l
+    JOIN products p ON l.product_id = p.id
+    JOIN creators c ON l.creator_id = c.id
+    WHERE l.id = ?
+  `).get(id);
+
+  res.status(201).json({ ok: true, data: link, reused: false });
+});
+
 router.post('/admin-issue', authMiddleware, requireRole('admin'), (req: AuthRequest, res) => {
   const { creatorId, productIds } = req.body;
   if (!creatorId || !productIds || !Array.isArray(productIds) || productIds.length === 0) {

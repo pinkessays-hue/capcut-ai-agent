@@ -218,6 +218,10 @@ function migrateSchema(d: Database.Database): void {
     d.exec(`ALTER TABLE creators ADD COLUMN name_en TEXT DEFAULT ''`);
   }
 
+  if (!hasCol('products', 'thumbnail_url')) {
+    d.exec(`ALTER TABLE products ADD COLUMN thumbnail_url TEXT DEFAULT ''`);
+  }
+
   if (!hasCol('orders', 'attribution_type')) {
     d.exec(`ALTER TABLE orders ADD COLUMN attribution_type TEXT DEFAULT 'none'`);
   }

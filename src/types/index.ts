@@ -44,6 +44,7 @@ export interface Product {
   price: number;
   commissionRate: number;
   imageUrl?: string;
+  thumbnailUrl?: string;
   productUrl?: string;
   infoReady: boolean;
   saleStatus: 'active' | 'inactive' | 'preparing';

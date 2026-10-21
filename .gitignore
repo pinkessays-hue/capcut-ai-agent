@@ -4,3 +4,5 @@ dist/
 .DS_Store
 data/
 .env
+uploads/products/*
+!uploads/products/.gitkeep

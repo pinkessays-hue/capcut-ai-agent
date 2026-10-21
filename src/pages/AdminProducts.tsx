@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getProducts, updateProduct, createProduct } from '../api/products';
+import { useState, useEffect, useRef } from 'react';
+import { getProducts, updateProduct, createProduct, uploadThumbnail } from '../api/products';
 import { formatKRW, formatPercent } from '../types';
 import type { Product } from '../types';
 import ProductImage from '../components/ProductImage';
@@ -24,6 +24,13 @@ export default function AdminProducts() {
   const [newStatus, setNewStatus] = useState<'active' | 'inactive' | 'preparing'>('active');
   const [newProductUrl, setNewProductUrl] = useState('');
   const [creating, setCreating] = useState(false);
+
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const newThumbRef = useRef<HTMLInputElement>(null);
+  const editThumbRef = useRef<HTMLInputElement>(null);
+  const [newThumbPreview, setNewThumbPreview] = useState<string | null>(null);
+  const [newThumbFile, setNewThumbFile] = useState<File | null>(null);
 
   const loadData = () => {
     getProducts().then(res => { if (res.data) setProducts(res.data); }).catch(() => {});
@@ -66,7 +73,7 @@ export default function AdminProducts() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      await createProduct({
+      const res = await createProduct({
         name: newName,
         originalName: newOriginalName || undefined,
         description: newDesc,
@@ -76,13 +83,41 @@ export default function AdminProducts() {
         productUrl: newProductUrl || undefined,
         infoReady: true,
       });
+      if (res.data && newThumbFile) {
+        await uploadThumbnail(res.data.id, newThumbFile);
+      }
       setShowCreate(false);
       setNewName(''); setNewOriginalName(''); setNewDesc('');
       setNewPrice(0); setNewRate(5); setNewStatus('active'); setNewProductUrl('');
+      setNewThumbFile(null); setNewThumbPreview(null);
       loadData();
     } catch { /* silent */ } finally {
       setCreating(false);
     }
+  };
+
+  const handleThumbUpload = async (productId: string, file: File) => {
+    setUploading(productId);
+    setUploadMsg(null);
+    try {
+      await uploadThumbnail(productId, file);
+      setUploadMsg('이미지가 업로드되었습니다.');
+      loadData();
+      setTimeout(() => setUploadMsg(null), 2000);
+    } catch (err: unknown) {
+      setUploadMsg(err instanceof Error ? err.message : '업로드 실패');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleNewThumbChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setNewThumbFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setNewThumbPreview(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -94,9 +129,36 @@ export default function AdminProducts() {
         )}
       </div>
 
+      {uploadMsg && (
+        <div style={{ background: 'var(--primary-soft)', color: 'var(--primary)', padding: '10px 14px', borderRadius: 10, fontSize: 13, marginBottom: 16 }}>
+          {uploadMsg}
+        </div>
+      )}
+
       {showCreate && (
         <div className="card" style={{ padding: 20, marginBottom: 24 }}>
           <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 16 }}>새 상품 등록</h3>
+
+          <div style={{ marginBottom: 12 }}>
+            <label className="form-label">썸네일 이미지</label>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              {newThumbPreview ? (
+                <div style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                  <img src={newThumbPreview} alt="preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                </div>
+              ) : (
+                <div style={{ width: 80, height: 80, borderRadius: 8, background: 'var(--surface-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, flexShrink: 0 }}>📷</div>
+              )}
+              <div>
+                <input ref={newThumbRef} type="file" accept="image/*" onChange={handleNewThumbChange} style={{ display: 'none' }} />
+                <button className="btn-ghost btn-small" onClick={() => newThumbRef.current?.click()}>
+                  {newThumbFile ? '이미지 변경' : '이미지 선택'}
+                </button>
+                <p style={{ fontSize: 11, color: 'var(--stone)', marginTop: 4 }}>JPG, PNG, WebP (최대 5MB)</p>
+              </div>
+            </div>
+          </div>
+
           <div style={{ marginBottom: 12 }}>
             <label className="form-label">표시명 *</label>
             <input className="input-field" value={newName} onChange={e => setNewName(e.target.value)} placeholder="고객에게 보여질 상품명" />
@@ -135,7 +197,7 @@ export default function AdminProducts() {
             <button className="btn-buy" onClick={handleCreate} disabled={creating || !newName.trim()}>
               {creating ? '등록 중...' : '상품 등록'}
             </button>
-            <button className="btn-ghost" onClick={() => setShowCreate(false)}>취소</button>
+            <button className="btn-ghost" onClick={() => { setShowCreate(false); setNewThumbFile(null); setNewThumbPreview(null); }}>취소</button>
           </div>
         </div>
       )}
@@ -148,6 +210,30 @@ export default function AdminProducts() {
             <div key={p.id} className="card" style={{ overflow: 'hidden' }}>
               {editId === p.id ? (
                 <div style={{ padding: 20 }}>
+                  <div style={{ marginBottom: 12 }}>
+                    <label className="form-label">썸네일 이미지</label>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                      <div style={{ width: 80, height: 80, borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+                        <ProductImage product={p} size={80} />
+                      </div>
+                      <div>
+                        <input
+                          ref={editThumbRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleThumbUpload(p.id, file);
+                          }}
+                        />
+                        <button className="btn-ghost btn-small" onClick={() => editThumbRef.current?.click()} disabled={uploading === p.id}>
+                          {uploading === p.id ? '업로드 중...' : p.thumbnailUrl ? '이미지 변경' : '이미지 업로드'}
+                        </button>
+                        <p style={{ fontSize: 11, color: 'var(--stone)', marginTop: 4 }}>JPG, PNG, WebP (최대 5MB)</p>
+                      </div>
+                    </div>
+                  </div>
                   <div style={{ marginBottom: 12 }}>
                     <label className="form-label">표시명</label>
                     <input className="input-field" value={editName} onChange={e => setEditName(e.target.value)} />
@@ -195,7 +281,7 @@ export default function AdminProducts() {
               ) : (
                 <div style={{ display: 'flex', gap: 16, padding: 16, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ width: 80, height: 80, flexShrink: 0, borderRadius: 12, overflow: 'hidden' }}>
-                    <ProductImage product={p} />
+                    <ProductImage product={p} size={80} />
                   </div>
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>

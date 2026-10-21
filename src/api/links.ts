@@ -32,6 +32,11 @@ export async function getMyLinks(): Promise<ApiResponse<AffiliateLink[]>> {
   return { ok: true, data: (raw.data || []).map(mapLink) };
 }
 
+export async function getOrCreateLink(productId: string): Promise<ApiResponse<AffiliateLink & { reused?: boolean }>> {
+  const raw = await api.post<{ ok: boolean; data: Record<string, unknown>; reused: boolean }>('/links/quick', { productId });
+  return { ok: true, data: { ...mapLink(raw.data), reused: raw.reused } as AffiliateLink & { reused?: boolean } };
+}
+
 export async function getAllLinks(): Promise<ApiResponse<AffiliateLink[]>> {
   const raw = await api.get<{ ok: boolean; data: Array<Record<string, unknown>> }>('/links');
   return { ok: true, data: (raw.data || []).map(mapLink) };

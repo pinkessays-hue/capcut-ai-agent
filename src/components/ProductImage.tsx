@@ -19,9 +19,55 @@ const ICONS: Record<string, string> = {
 };
 
 export default function ProductImage({ product, size, rounded = '0' }: ProductImageProps) {
+  const s = size || 160;
+
+  if (product.thumbnailUrl) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: s,
+          minHeight: s,
+          borderRadius: rounded,
+          overflow: 'hidden',
+          position: 'relative',
+          background: '#f1f4f7',
+        }}
+        role="img"
+        aria-label={product.name}
+      >
+        <img
+          src={product.thumbnailUrl}
+          alt={product.name}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+          }}
+        />
+        {!product.infoReady && (
+          <span style={{
+            position: 'absolute',
+            bottom: 8,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--steel)',
+            background: 'rgba(255,255,255,0.85)',
+            padding: '2px 8px',
+            borderRadius: 20,
+          }}>
+            준비 중
+          </span>
+        )}
+      </div>
+    );
+  }
+
   const bg = COLORS[product.name] || '#e8e8e8';
   const icon = ICONS[product.name] || '📦';
-  const s = size || 160;
 
   return (
     <div

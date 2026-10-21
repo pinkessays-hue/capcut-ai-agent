@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
+import path from 'path';
 import dotenv from 'dotenv';
 import { getDb, seedDatabase } from './db';
 import authRoutes from './routes/auth';
@@ -27,6 +28,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
+
+// --- Static uploads ---
+app.use('/uploads', express.static(path.join(import.meta.dirname, '..', 'uploads')));
 
 // --- Link redirect handler ---
 app.get('/r/:code', (req, res) => {

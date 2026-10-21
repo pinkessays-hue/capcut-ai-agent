@@ -10,6 +10,7 @@ function mapProduct(p: Record<string, unknown>): Product {
     price: p.price as number || 0,
     commissionRate: (p.commission_rate ?? p.commissionRate) as number || 0,
     imageUrl: p.image_url as string || undefined,
+    thumbnailUrl: (p.thumbnail_url ?? p.thumbnailUrl) as string || undefined,
     productUrl: (p.product_url ?? p.productUrl) as string || undefined,
     infoReady: !!(p.info_ready ?? p.infoReady),
     saleStatus: (p.sale_status ?? p.saleStatus ?? 'preparing') as Product['saleStatus'],
@@ -39,6 +40,21 @@ export async function createProduct(data: Partial<Product>): Promise<ApiResponse
     product_url: data.productUrl,
   });
   return { ok: true, data: mapProduct(raw.data) };
+}
+
+export async function uploadThumbnail(productId: string, file: File): Promise<ApiResponse<{ thumbnailUrl: string }>> {
+  const form = new FormData();
+  form.append('thumbnail', file);
+  const token = (await import('./client')).getAccessToken();
+  const res = await fetch(`/api/products/${productId}/thumbnail`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok || !json.ok) throw new Error(json.error || '업로드 실패');
+  return { ok: true, data: json.data };
 }
 
 export async function updateProduct(id: string, data: Partial<Product>): Promise<ApiResponse<Product>> {
