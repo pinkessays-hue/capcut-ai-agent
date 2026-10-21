@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { getDb, seedDatabase } from './db';
 import authRoutes from './routes/auth';
@@ -23,7 +24,7 @@ const PORT = parseInt(process.env.PORT || '3001');
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? true : 'http://localhost:5173'),
   credentials: true,
 }));
 app.use(express.json());
@@ -108,6 +109,15 @@ app.get('/api/site-info', (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, env: process.env.NODE_ENV || 'development' });
 });
+
+// --- Serve frontend (built by vite build) ---
+const distPath = path.join(import.meta.dirname, '..', 'dist');
+if (fs.existsSync(path.join(distPath, 'index.html'))) {
+  app.use(express.static(distPath));
+  app.get('/{*path}', (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // --- Init and start ---
 getDb();
