@@ -385,6 +385,18 @@ function seedTestData(d: DatabaseSync, now: string): void {
   insertLedger.run(uuidv4(), creator2Id, order5Id, 'credit', 44500, 44500, '주문 확정 수수료', '2024-10-12T10:00:00Z');
 }
 
+export function runTransaction(fn: () => void): void {
+  const d = getDb();
+  d.exec('BEGIN');
+  try {
+    fn();
+    d.exec('COMMIT');
+  } catch (err) {
+    d.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 export function generateLinkCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';

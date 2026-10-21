@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { getDb, generateLinkCode, getCreatorBalance, addAuditLog } from '../db';
+import { getDb, generateLinkCode, getCreatorBalance, addAuditLog, runTransaction } from '../db';
 import { authMiddleware, requireRole, AuthRequest } from '../auth';
 
 const router = Router();
@@ -187,32 +187,30 @@ router.post('/admin-issue', authMiddleware, requireRole('admin'), (req: AuthRequ
   const now = new Date().toISOString();
   const results: { productId: string; linkId: string; code: string; existing: boolean }[] = [];
 
-  const txn = db.transaction(() => {
-    for (const productId of productIds) {
-      const product = db.prepare('SELECT id, sale_status FROM products WHERE id = ?').get(productId) as { id: string; sale_status: string } | undefined;
-      if (!product) continue;
-
-      const existing = db.prepare('SELECT id, code FROM links WHERE creator_id = ? AND product_id = ? AND active = 1').get(creatorId, productId) as { id: string; code: string } | undefined;
-      if (existing) {
-        results.push({ productId, linkId: existing.id, code: existing.code, existing: true });
-        continue;
-      }
-
-      let code = generateLinkCode();
-      while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
-        code = generateLinkCode();
-      }
-
-      const linkId = uuidv4();
-      db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, active, issued_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-        linkId, code, creatorId, productId, 'direct', '', 1, req.user!.id, now
-      );
-      results.push({ productId, linkId, code, existing: false });
-    }
-  });
-
   try {
-    txn();
+    runTransaction(() => {
+      for (const productId of productIds) {
+        const product = db.prepare('SELECT id, sale_status FROM products WHERE id = ?').get(productId) as { id: string; sale_status: string } | undefined;
+        if (!product) continue;
+
+        const existing = db.prepare('SELECT id, code FROM links WHERE creator_id = ? AND product_id = ? AND active = 1').get(creatorId, productId) as { id: string; code: string } | undefined;
+        if (existing) {
+          results.push({ productId, linkId: existing.id, code: existing.code, existing: true });
+          continue;
+        }
+
+        let code = generateLinkCode();
+        while (db.prepare('SELECT id FROM links WHERE code = ?').get(code)) {
+          code = generateLinkCode();
+        }
+
+        const linkId = uuidv4();
+        db.prepare('INSERT INTO links (id, code, creator_id, product_id, channel, content_title, active, issued_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+          linkId, code, creatorId, productId, 'direct', '', 1, req.user!.id, now
+        );
+        results.push({ productId, linkId, code, existing: false });
+      }
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: '링크 발급 중 오류가 발생했습니다.', detail: message });

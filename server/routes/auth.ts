@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
-import { getDb } from '../db';
+import { getDb, runTransaction } from '../db';
 import { hashPassword, verifyPassword, generateToken, authMiddleware, AuthRequest } from '../auth';
 
 const router = Router();
@@ -60,18 +60,16 @@ router.post('/register', (req, res) => {
     'INSERT INTO creators (id, user_id, display_name, phone, category, channels, selected_products, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   );
 
-  const txn = db.transaction(() => {
-    insertUser.run(userId, email, passwordHash, name, 'creator', 'active', nicknameVal, pinHash, now);
-    insertCreator.run(
-      creatorId, userId, name, phone || '', category || '',
-      JSON.stringify(channels || []),
-      JSON.stringify(selectedProducts),
-      'pending', now
-    );
-  });
-
   try {
-    txn();
+    runTransaction(() => {
+      insertUser.run(userId, email, passwordHash, name, 'creator', 'active', nicknameVal, pinHash, now);
+      insertCreator.run(
+        creatorId, userId, name, phone || '', category || '',
+        JSON.stringify(channels || []),
+        JSON.stringify(selectedProducts),
+        'pending', now
+      );
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: '회원가입 처리 중 오류가 발생했습니다.', detail: message });

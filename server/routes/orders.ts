@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { getDb, addAuditLog, getCreatorBalance } from '../db';
+import { getDb, addAuditLog, getCreatorBalance, runTransaction } from '../db';
 import { authMiddleware, requireRole, AuthRequest } from '../auth';
 
 const router = Router();
@@ -56,38 +56,36 @@ router.patch('/:id/status', authMiddleware, requireRole('admin'), (req: AuthRequ
   const now = new Date().toISOString();
   const creatorId = order.creator_id as string;
 
-  const txn = db.transaction(() => {
-    if (status === 'confirmed' && prevStatus !== 'confirmed') {
-      const commission = Math.round((order.amount as number) * (order.commission_rate as number));
-      db.prepare('UPDATE orders SET order_status = ?, commission = ?, updated_at = ? WHERE id = ?').run(status, commission, now, req.params.id);
+  try {
+    runTransaction(() => {
+      if (status === 'confirmed' && prevStatus !== 'confirmed') {
+        const commission = Math.round((order.amount as number) * (order.commission_rate as number));
+        db.prepare('UPDATE orders SET order_status = ?, commission = ?, updated_at = ? WHERE id = ?').run(status, commission, now, req.params.id);
 
-      if (creatorId) {
-        const existingCredit = db.prepare("SELECT id FROM point_ledger WHERE order_id = ? AND entry_type = 'credit'").get(req.params.id);
-        if (!existingCredit) {
+        if (creatorId) {
+          const existingCredit = db.prepare("SELECT id FROM point_ledger WHERE order_id = ? AND entry_type = 'credit'").get(req.params.id);
+          if (!existingCredit) {
+            const balance = getCreatorBalance(creatorId);
+            db.prepare('INSERT INTO point_ledger (id, creator_id, order_id, entry_type, amount, balance_after, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+              uuidv4(), creatorId, req.params.id, 'credit', commission, balance + commission, '주문 확정 수수료', now
+            );
+          }
+        }
+      } else if ((status === 'cancelled' || status === 'refunded') && prevStatus === 'confirmed') {
+        const commission = order.commission as number;
+        db.prepare('UPDATE orders SET order_status = ?, commission = 0, updated_at = ? WHERE id = ?').run(status, now, req.params.id);
+
+        if (creatorId && commission > 0) {
           const balance = getCreatorBalance(creatorId);
           db.prepare('INSERT INTO point_ledger (id, creator_id, order_id, entry_type, amount, balance_after, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-            uuidv4(), creatorId, req.params.id, 'credit', commission, balance + commission, '주문 확정 수수료', now
+            uuidv4(), creatorId, req.params.id, 'cancel', -commission, balance - commission, `주문 ${status === 'cancelled' ? '취소' : '환불'} 수수료 회수`, now
           );
         }
+      } else {
+        const commission = status === 'cancelled' || status === 'refunded' ? 0 : (order.commission as number);
+        db.prepare('UPDATE orders SET order_status = ?, commission = ?, updated_at = ? WHERE id = ?').run(status, commission, now, req.params.id);
       }
-    } else if ((status === 'cancelled' || status === 'refunded') && prevStatus === 'confirmed') {
-      const commission = order.commission as number;
-      db.prepare('UPDATE orders SET order_status = ?, commission = 0, updated_at = ? WHERE id = ?').run(status, now, req.params.id);
-
-      if (creatorId && commission > 0) {
-        const balance = getCreatorBalance(creatorId);
-        db.prepare('INSERT INTO point_ledger (id, creator_id, order_id, entry_type, amount, balance_after, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-          uuidv4(), creatorId, req.params.id, 'cancel', -commission, balance - commission, `주문 ${status === 'cancelled' ? '취소' : '환불'} 수수료 회수`, now
-        );
-      }
-    } else {
-      const commission = status === 'cancelled' || status === 'refunded' ? 0 : (order.commission as number);
-      db.prepare('UPDATE orders SET order_status = ?, commission = ?, updated_at = ? WHERE id = ?').run(status, commission, now, req.params.id);
-    }
-  });
-
-  try {
-    txn();
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: '주문 상태 변경 실패', detail: message });
